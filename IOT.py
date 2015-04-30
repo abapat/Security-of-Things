@@ -141,8 +141,9 @@ def ack(cmd, addr):
 
 init()
 s = socket(AF_INET, SOCK_DGRAM)
-s.setsockopt(SOL_SOCKET, SO_REUSEADDR, 1)
-s.setsockopt(SOL_SOCKET, SO_BROADCAST, 1)
+broadcast = socket(AF_INET, SOCK_DGRAM)
+broadcast.setsockopt(SOL_SOCKET, SO_REUSEADDR, 1)
+broadcast.setsockopt(SOL_SOCKET, SO_BROADCAST, 1)
 s.bind(('', RECV_PORT))
 s.settimeout(TIMEOUT)
 
@@ -150,7 +151,7 @@ msgCount = 0
 while 1:
 	msgCount += 1
 	#TODO do i have to keep a table of previous salts to handle the case of a reply to an old broadcast?
-	salt = brocast(s, msgCount)
+	salt = brocast(broadcast, msgCount)
 	cacheSalt(msgCount, salt)
 	recv = False
 	try:
