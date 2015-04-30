@@ -51,7 +51,7 @@ def checkPass(tup, salt, addr):
 	for login in users:
 		if tup[0] == login[0]: #username match
 			pwd = login[1]
-			pwd = (hashlib.sha1(pwd + salt)).hexdigest()
+			pwd = (hashlib.sha256(pwd + salt)).hexdigest()
 			if pwd == tup[1]:
 				#success
 				s.sendto("ACK:ENCRYPT", addr)
