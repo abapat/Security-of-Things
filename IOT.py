@@ -9,6 +9,8 @@ RECV_PORT = 50001
 PASSWORD_FILE = 'passwords'
 TIMEOUT = 60 #seconds
 MAX_CACHE = 10
+PUB_KEY_FILE = "IOTrsa.pub"
+PRIV_KEY_FILE = "IOTrsa"
 
 users = []
 table = None
@@ -17,6 +19,10 @@ table = None
 def init():
 	global users
 	global table
+	global pubkey
+	global privkey
+	global clientPub
+
 	table = dict()
 	f = open(PASSWORD_FILE, 'r')
 	s = f.readline()
@@ -26,6 +32,16 @@ def init():
 		tup = (l[0], l[1])
 		users.append(tup)
 		s = f.readline()
+
+	#Initialize global public key for IOT
+	pub = open(PUB_KEY_FILE, "r").read()
+    pubkey = RSA.importKey(pub)
+    pubkey = PKCS1_OAEP.new(pubkey)
+
+    #Initialize global private key for IOT
+    priv = open(PRIV_KEY_FILE, "r").read()
+    privkey = RSA.importKey(priv)
+    privkey = PKCS1_OAEP.new(privkey)
 
 	f.close()
 
@@ -74,7 +90,7 @@ def checkPass(tup, salt, addr):
 			if pwd == tup[1]:
 				print "its a match!"
 				
-				s.sendto("ACK:ENCRYPT", addr)
+				s.sendto("ACK:ENCRYPT,"+pubkey.exportKey(), addr)
 				return True
 			else:
 				print "salt :", salt
@@ -106,8 +122,18 @@ def ack(cmd, addr):
 		ret = checkPass(tup, salt, addr)
 		#check passwords
 	elif c == "ENCRYPT":
-		#begin diffy hellman
-		ret = True
+		#Get the pubic key from the client
+		
+		#Check to see if a key was sent
+		if(cmd[2]):
+			cpub = cmd[2]
+			clientPub = RSA.importKey(cpub)
+			clientPub = PKCS1_OAEP.new(clientPub)
+			ret = True
+		#No Public Key Sent
+		else:
+			s.sendto("ERROR:NULLPUBKEY", addr)
+			ret = False
 	else:
 		s.sendto("ERROR:ARGUMENT", addr)
 
