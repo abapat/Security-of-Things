@@ -90,7 +90,7 @@ def checkPass(tup, salt, addr):
 #TODO ERROR CHECK FIELDS, CANT ASSUME THEY ARE INTS 
 def getSalt(num):
 	num = int(num)
-	salt = table.get(num, default=None)
+	salt = table.get(num, None)
 	return salt
 
 
@@ -120,8 +120,9 @@ s.setsockopt(SOL_SOCKET, SO_BROADCAST, 1)
 s.bind(('', RECV_PORT))
 s.settimeout(TIMEOUT)
 
-msgCount = 1
+msgCount = 0
 while 1:
+	msgCount += 1
 	#TODO do i have to keep a table of previous salts to handle the case of a reply to an old broadcast?
 	salt = brocast(s, msgCount)
 	cacheSalt(msgCount, salt)
@@ -144,8 +145,6 @@ while 1:
 			break
 	else:
 		print("Invalid Command, ignoring")
-
-	msgCount += 1
 
 print("Closing socket")
 s.close()
