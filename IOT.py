@@ -119,7 +119,7 @@ def checkPass(tup, salt, addr):
 			if pwd == tup[1]:
 				print "its a match!"
 				
-				send(sock, "ACK:ENCRYPT,"+pubkey.exportKey(), addr)
+				send(sock, "ACK:ENCRYPT,"+pubkey.publickey().exportKey(), addr)
 				return True
 			else:
 				print "salt :", salt
