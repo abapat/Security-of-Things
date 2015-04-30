@@ -1,6 +1,5 @@
 import sys, time
 from socket import *
-from Crypto.Hash import MD5
 from Crypto.PublicKey import RSA
 from Crypto import Random
 from Crypto.Cipher import PKCS1_OAEP
