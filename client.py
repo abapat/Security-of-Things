@@ -17,12 +17,12 @@ def parseMessage(msg):
 
 	return x
 
-def connect(salt):
+def connect(msgnum, salt):
 	username = raw_input("username : ")
 	password = raw_input("password : ")
 	hashed = hash_password(password, salt)
 	print "salt :", salt
-	return "ACK:PASS,"+username+","+hashed
+	return "ACK:PASS,"+msgnum+","+username+","+hashed
 
 #create a UDP socket
 sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -36,11 +36,15 @@ while True:
 	cmd = parseMessage(data)
 
 	if(cmd[0] == "CONNECT") : 
-		msg = connect(cmd[1])
+		msg = connect(cmd[2],cmd[1])
+
+		print "sending", msg, "to", server
+		sock.sendto(msg, server)
 	elif(cmd[0] == "ACK") :
 		if(cmd[1] == "ENCRYPT") :
 			print "Congrats, we logged on."
 			#TODO: ummm....what does this mean again?
+			break
 	elif(cmd[0] == "ERROR") :
 		if(cmd[1] == "USERNAME"):
 			print "ERROR : Invalid Username"
@@ -50,7 +54,5 @@ while True:
 			print "ERROR : Bad Argument."
 	else :
 		break
-	print "sending", msg, "to", server
-	sock.sendto(msg, server)
 
 sock.close()
