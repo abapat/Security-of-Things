@@ -18,6 +18,8 @@ PRIV_KEY_FILE = "IOTrsa"
 
 users = []
 table = None
+sock = None
+broadcast = None
 
 #TODO error checking on file
 def init():
@@ -26,6 +28,18 @@ def init():
 	global pubkey
 	global privkey
 	global clientPub
+	global sock
+	global broadcast
+
+	
+	broadcast = socket(AF_INET, SOCK_DGRAM)
+	broadcast.setsockopt(SOL_SOCKET, SO_REUSEADDR, 1)
+	broadcast.setsockopt(SOL_SOCKET, SO_BROADCAST, 1)
+
+	sock = socket(AF_INET, SOCK_DGRAM)
+	sock.bind(('', RECV_PORT))
+	sock.settimeout(TIMEOUT)
+
 
 	table = dict()
 	f = open(PASSWORD_FILE, 'r')
@@ -49,6 +63,17 @@ def init():
 
 	f.close()
 
+def send(s, msg, addr):
+	sent = False
+	while sent == False:
+		try:
+			s.sendto(msg, addr)
+			sent = True
+		except IOError, e: #socket.error is subclass
+			if e.errno == 101:
+				print "No Network connection, trying again later..."
+				time.sleep(60) #check back in a minute
+
 def cacheSalt(num, salt):
 	global table
 	num = int(num)
@@ -70,7 +95,7 @@ def brocast(s, num):
 
 	
 	print msg
-	s.sendto(msg, ('<broadcast>', BROADCAST_PORT))
+	send(s, msg, ('<broadcast>', BROADCAST_PORT))
 
 	return salt
 
@@ -94,17 +119,17 @@ def checkPass(tup, salt, addr):
 			if pwd == tup[1]:
 				print "its a match!"
 				
-				s.sendto("ACK:ENCRYPT,"+pubkey.exportKey(), addr)
+				send(sock, "ACK:ENCRYPT,"+pubkey.exportKey(), addr)
 				return True
 			else:
 				print "salt :", salt
 				print pwd, "!=", tup[1]
 
-				s.sendto("ERROR:PASSWORD", addr)
+				send(sock, "ERROR:PASSWORD", addr)
 				return False
 	
 	#user not found
-	s.sendto("ERROR:USERNAME", addr)
+	send(sock, "ERROR:USERNAME", addr)
 	return False
 
 #TODO ERROR CHECK FIELDS, CANT ASSUME THEY ARE INTS 
@@ -136,21 +161,18 @@ def ack(cmd, addr):
 			ret = True
 		#No Public Key Sent
 		else:
-			s.sendto("ERROR:NULLPUBKEY", addr)
+			send(s, "ERROR:NULLPUBKEY", addr)
 			ret = False
 	else:
-		s.sendto("ERROR:ARGUMENT", addr)
+		send(s, "ERROR:ARGUMENT", addr)
 
 	return ret
 
-init()
-s = socket(AF_INET, SOCK_DGRAM)
-broadcast = socket(AF_INET, SOCK_DGRAM)
-broadcast.setsockopt(SOL_SOCKET, SO_REUSEADDR, 1)
-broadcast.setsockopt(SOL_SOCKET, SO_BROADCAST, 1)
-s.bind(('', RECV_PORT))
-s.settimeout(TIMEOUT)
 
+#global sock
+#global broadcast
+
+init()
 msgCount = 0
 sendBrocast = True
 while 1:
@@ -161,7 +183,7 @@ while 1:
 	
 	recv = False
 	try:
-		msg, server = s.recvfrom(4096) #TODO spam protection?
+		msg, server = sock.recvfrom(4096) #TODO spam protection?
 		recv = True
 		#print "message is " + str(msg) + "\nFrom " + str(server)
 	except timeout:
@@ -181,7 +203,7 @@ while 1:
 		print("Invalid Command, ignoring")
 
 print("Closing socket")
-s.close()
+sock.close()
 
 
 

@@ -19,7 +19,7 @@ f.close()
 f = open('passwords', 'w')
 f.write("admin,")
 m = hashlib.sha256()
-m.update("varunsucksweewees")
+m.update("pass")
 f.write(m.hexdigest())
 f.close()
 
