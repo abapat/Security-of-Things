@@ -29,17 +29,22 @@ sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 server_address = ('', 50000)
 sock.bind(server_address)
 
+ignoreBrocast = 0
 while True:
 	# Receive response
 	data, server = sock.recvfrom(4096)
-
+	print "\nim getting my data from :", server
+	if(ignoreBrocast and server[1] != 50001):
+		continue
 	cmd = parseMessage(data)
 
 	if(cmd[0] == "CONNECT") : 
 		msg = connect(cmd[2],cmd[1])
-
-		print "sending", msg, "to", server
-		sock.sendto(msg, server)
+		#changing the port #
+		ackaddr = (server[0], 50001)
+		print "sending", msg, "to", ackaddr
+		sock.sendto(msg, ackaddr)
+		ignoreBrocast = 1
 	elif(cmd[0] == "ACK") :
 		if(cmd[1] == "ENCRYPT") :
 			print "Congrats, we logged on."
@@ -52,6 +57,7 @@ while True:
 			print "ERROR : Incorrect Password."
 		if(cmd[1] == "ARGUMENT"):
 			print "ERROR : Bad Argument."
+		ignoreBrocast = 0
 	else :
 		break
 
