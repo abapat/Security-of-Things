@@ -35,30 +35,31 @@ def decrypt_RSA(private_key_loc, package):
     decrypted = rsakey.decrypt(b64decode(package))
     return decrypted
 
-rng = Random.new().read
-key = RSA.generate(4096,rng)
+def generateRSAKeys(pubName, privName):
+	rng = Random.new().read
+	key = RSA.generate(4096,rng)
 
-binPrivKey = key.exportKey('DER')
-binPubKey =  key.publickey().exportKey('DER')
+	binPrivKey = key.exportKey('DER')
+	binPubKey =  key.publickey().exportKey('DER')
 
-with open("CLIENTrsa","w") as f:
-	f.write(binPrivKey)
-	f.close()
+	with open("CLIENTrsa","w") as f:
+		f.write(binPrivKey)
+		f.close()
 
-with open("CLIENTrsa.pub","w") as f:
-	f.write(binPubKey)
-	f.close()
+	with open("CLIENTrsa.pub","w") as f:
+		f.write(binPubKey)
+		f.close()
 
-"""msg = "We attack at dawn"
+msg = "We attack at dawn"
 
 package = encrypt_RSA("/Users/varun/Documents/Stony Brook/Junior Year/2nd Sem/CSE 408/Security-of-Things/IOTrsa.pub",msg)
 
 print "encrypted text = "+package
 
-print "decrypted text = "+decrypt_RSA("/Users/varun/Documents/Stony Brook/Junior Year/2nd Sem/CSE 408/Security-of-Things/IOTrsa",package)"""
+print "decrypted text = "+decrypt_RSA("/Users/varun/Documents/Stony Brook/Junior Year/2nd Sem/CSE 408/Security-of-Things/IOTrsa",package)
 
 
-#s.sendto(msg, ('localhost', 5000))
+#s.sendto(package, ('localhost', 5000))
 
 
 
