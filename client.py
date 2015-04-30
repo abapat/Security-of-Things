@@ -4,9 +4,25 @@ import uuid
 import hashlib
 
 def hash_password(password, salt):
-
 	hashedpassword = hashlib.sha256(password.encode()).hexdigest() 
-	return hashlib.sha256(salt.encode() + hashedpassword.encode()).hexdigest()
+	return hashlib.sha256(hashedpassword.encode() + salt.encode()).hexdigest()
+
+def parseMessage(msg):
+	x = []
+	c = msg.split(":")
+	x.append(c[0])
+	args = c[1].split(",")
+	for arg in args:
+		x.append(arg)
+
+	return x
+
+def connect(salt):
+	username = raw_input("username : ")
+	password = raw_input("password : ")
+	hashed = hash_password(password, salt)
+	print "salt :", salt
+	return "ACK:PASS,"+username+","+hashed
 
 #create a UDP socket
 sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -15,12 +31,26 @@ sock.bind(server_address)
 
 while True:
 	# Receive response
-	salt, server = sock.recvfrom(4096)
+	data, server = sock.recvfrom(4096)
 
-	password = raw_input("password : ")
-	hashed = hash_password(password, salt)
-	print hashed
+	cmd = parseMessage(data)
 
-	sock.sendto(hashed, server)
+	if(cmd[0] == "CONNECT") : 
+		msg = connect(cmd[1])
+	elif(cmd[0] == "ACK") :
+		if(cmd[1] == "ENCRYPT") :
+			print "Congrats, we logged on."
+			#TODO: ummm....what does this mean again?
+	elif(cmd[0] == "ERROR") :
+		if(cmd[1] == "USERNAME"):
+			print "ERROR : Invalid Username"
+		if(cmd[1] == "PASSWORD"):
+			print "ERROR : Incorrect Password."
+		if(cmd[1] == "ARGUMENT"):
+			print "ERROR : Bad Argument."
+	else :
+		break
+	print "sending", msg, "to", server
+	sock.sendto(msg, server)
 
 sock.close()

@@ -7,7 +7,7 @@ DEVICE_NAME = "Intel Galileo"
 BROADCAST_PORT = 50000
 RECV_PORT = 50001
 PASSWORD_FILE = 'passwords'
-TIMEOUT = 5 #seconds
+TIMEOUT = 30 #seconds
 
 users = []
 
@@ -33,6 +33,7 @@ def brocast(s):
 	msg += ","
 	msg += DEVICE_NAME
 	
+	print msg
 	s.sendto(msg, ('<broadcast>', BROADCAST_PORT))
 
 	return salt
@@ -41,7 +42,7 @@ def parseMessage(msg):
 	x = []
 	c = msg.split(":")
 	x.append(c[0])
-	args = c.split(",")
+	args = c[1].split(",")
 	for arg in args:
 		x.append(arg)
 
@@ -51,12 +52,18 @@ def checkPass(tup, salt, addr):
 	for login in users:
 		if tup[0] == login[0]: #username match
 			pwd = login[1]
-			pwd = (hashlib.sha256(pwd + salt)).hexdigest()
+			pwd = (hashlib.sha256(pwd.encode() + salt.encode())).hexdigest()
+
+			#success
 			if pwd == tup[1]:
-				#success
+				print "its a match!"
+				
 				s.sendto("ACK:ENCRYPT", addr)
 				return True
 			else:
+				print "salt :", salt
+				print pwd, "!=", tup[1]
+
 				s.sendto("ERROR:PASSWORD", addr)
 				return False
 	
@@ -77,8 +84,6 @@ def ack(cmd, salt, addr):
 		ret = True
 	else:
 		s.sendto("ERROR:ARGUMENT", addr)
-
-		
 
 	return ret
 
