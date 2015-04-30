@@ -7,7 +7,7 @@ DEVICE_NAME = "Intel Galileo"
 BROADCAST_PORT = 50000
 RECV_PORT = 50001
 PASSWORD_FILE = 'passwords'
-TIMEOUT = 30 #seconds
+TIMEOUT = 60 #seconds
 
 users = []
 
@@ -112,11 +112,14 @@ while 1:
 	cmd = parseMessage(msg)
 	
 	if cmd[0] == "ACK":
-		ack(cmd, salt, server)
+		success = ack(cmd, salt, server)
+		if success:
+			break
 	else:
 		print("Invalid Command, ignoring")
 
-
+print("Closing socket")
+s.close()
 
 
 
