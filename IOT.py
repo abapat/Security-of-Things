@@ -1,6 +1,10 @@
 import hashlib, uuid
 import os, sys, time
 from socket import *
+from Crypto.PublicKey import RSA
+from Crypto import Random
+from Crypto.Cipher import PKCS1_OAEP
+from base64 import b64decode
 
 #defines
 DEVICE_NAME = "Intel Galileo"
@@ -35,13 +39,13 @@ def init():
 
 	#Initialize global public key for IOT
 	pub = open(PUB_KEY_FILE, "r").read()
-    pubkey = RSA.importKey(pub)
-    pubkey = PKCS1_OAEP.new(pubkey)
+	pubkey = RSA.importKey(pub)
+	pubkey = PKCS1_OAEP.new(pubkey)
 
     #Initialize global private key for IOT
-    priv = open(PRIV_KEY_FILE, "r").read()
-    privkey = RSA.importKey(priv)
-    privkey = PKCS1_OAEP.new(privkey)
+	priv = open(PRIV_KEY_FILE, "r").read()
+	privkey = RSA.importKey(priv)
+	privkey = PKCS1_OAEP.new(privkey)
 
 	f.close()
 
@@ -148,11 +152,13 @@ s.bind(('', RECV_PORT))
 s.settimeout(TIMEOUT)
 
 msgCount = 0
+sendBrocast = True
 while 1:
 	msgCount += 1
-	#TODO do i have to keep a table of previous salts to handle the case of a reply to an old broadcast?
-	salt = brocast(broadcast, msgCount)
-	cacheSalt(msgCount, salt)
+	if sendBrocast == True:
+		salt = brocast(broadcast, msgCount)
+		cacheSalt(msgCount, salt)
+	
 	recv = False
 	try:
 		msg, server = s.recvfrom(4096) #TODO spam protection?
@@ -169,6 +175,7 @@ while 1:
 	if cmd[0] == "ACK":
 		success = ack(cmd, server)
 		if success:
+			sendBrocast = False
 			break
 	else:
 		print("Invalid Command, ignoring")
