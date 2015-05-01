@@ -6,6 +6,7 @@ from Crypto import Random
 from Crypto.Cipher import PKCS1_OAEP
 from base64 import b64decode
 
+
 #defines
 DEVICE_NAME = "Intel Galileo"
 BROADCAST_PORT = 50000
@@ -64,12 +65,41 @@ def init():
 
 	f.close()
 
+
+def encrypt_RSA(public_key_loc, message):
+    '''
+    param: public_key_loc Path to public key
+    param: message String to be encrypted
+    return base64 encoded encrypted string
+    '''
+    key = open(public_key_loc, "r").read()
+    rsakey = RSA.importKey(key)
+    rsakey = PKCS1_OAEP.new(rsakey)
+    encrypted = rsakey.encrypt(message)
+    return encrypted.encode('base64')
+
+
+def decrypt_RSA(private_key_loc, package):
+    '''
+    param: public_key_loc Path to your private key
+    param: package String to be decrypted
+    return decrypted string
+    '''
+    key = open(private_key_loc, "r").read()
+    rsakey = RSA.importKey(key)
+    rsakey = PKCS1_OAEP.new(rsakey)
+    decrypted = rsakey.decrypt(b64decode(package))
+    return decrypted
+
+
 def send(s, msg, addr):
 	sent = False
 	while sent == False:
 		try:
+			#if(sys.getsizeof(msg)>300):
+			#	staggeredSend(s, msg, addr)
+			#else:
 			numSent = s.sendto(msg, addr)
-			
 			print "I sent :"+str(numSent)+" bytes"
 			print "The length of the message is: "+str(sys.getsizeof(msg))
 			sent = True
@@ -77,6 +107,25 @@ def send(s, msg, addr):
 			if e.errno == 101:
 				print "No Network connection, trying again later..."
 				time.sleep(60) #check back in a minute
+
+def staggeredSend(s, msg, addr):
+	msgLength = sys.getsizeof(msg)
+	piecesNeeded = msgLength/300
+	if(msgLength % 300 != 0):
+		piecesNeeded += 1 #To send the last bit of stuff
+
+	appendString = "ACK:ENCRYPT,"
+	for i in range(0,piecesNeeded):
+		thisChunk = ""
+		if(i == 0):
+			thisChunk = msg[(300*i):]
+		else:
+			thisChunk = appendString + msg[(300*i):]
+
+		thisChunk += ","+str((piecesNeeded-i)-1)
+		print "Sending the following in staggered form: "+thisChunk
+		s.sendto(thisChunk,addr)
+
 
 def cacheSalt(num, salt):
 	global table
@@ -123,8 +172,9 @@ def checkPass(tup, salt, addr):
 			if pwd == tup[1]:
 				print "its a match!"
 				
-				print "pubtext is below "
-				print pubtext
+				#print "pubtext is below "
+				#print pubtext
+
 				send(sock, "ACK:ENCRYPT,"+pubtext, addr)
 				return True
 			else:
@@ -158,6 +208,9 @@ def ack(cmd, addr):
 		#check passwords
 	elif c == "ENCRYPT":
 		#Get the pubic key from the client
+
+		#print "ENCRYPT statement received"
+		#print cmd[2]
 		
 		#Check to see if a key was sent
 		if(cmd[2]):
@@ -193,7 +246,7 @@ while 1:
 		recv = True
 		#print "message is " + str(msg) + "\nFrom " + str(server)
 	except timeout:
-		print("Timeout, Broadcasting again...")
+		continue
 
 	if recv == False:
 		continue
@@ -204,7 +257,7 @@ while 1:
 		success = ack(cmd, server)
 		if success:
 			sendBrocast = False
-			break
+			#break
 	else:
 		print("Invalid Command, ignoring")
 

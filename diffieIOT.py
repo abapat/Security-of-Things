@@ -38,24 +38,26 @@ def generateRSAKeys(pubName, privName):
 	rng = Random.new().read
 	key = RSA.generate(4096,rng)
 
-	binPrivKey = key.exportKey('DER')
-	binPubKey =  key.publickey().exportKey('DER')
+	binPrivKey = key.exportKey('PEM')
+	binPubKey =  key.publickey().exportKey('PEM')
 
-	with open("CLIENTrsa","w") as f:
+	with open(pubName,"w") as f:
 		f.write(binPrivKey)
 		f.close()
 
-	with open("CLIENTrsa.pub","w") as f:
+	with open(privName,"w") as f:
 		f.write(binPubKey)
 		f.close()
 
-msg = "We attack at dawn"
+"""msg = "We attack at dawn"
 
 package = encrypt_RSA("/Users/varun/Documents/Stony Brook/Junior Year/2nd Sem/CSE 408/Security-of-Things/IOTrsa.pub",msg)
 
 print "encrypted text = "+package
 
-print "decrypted text = "+decrypt_RSA("/Users/varun/Documents/Stony Brook/Junior Year/2nd Sem/CSE 408/Security-of-Things/IOTrsa",package)
+print "decrypted text = "+decrypt_RSA("/Users/varun/Documents/Stony Brook/Junior Year/2nd Sem/CSE 408/Security-of-Things/IOTrsa",package)"""
+
+generateRSAKeys("IOTrsa","IOTrsa.pub")
 
 
 #s.sendto(package, ('localhost', 5000))

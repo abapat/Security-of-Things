@@ -38,8 +38,8 @@ def initPub(pubKey):
 	global IOTpub
 	global IOTpubtext
 
-	print "The recieved key is below"
-	print pubKey
+	#print "The recieved key is below"
+	#print pubKey
 
 	IOTpubtext = pubKey
 	IOTpub = RSA.importKey(pubKey)
@@ -96,7 +96,9 @@ while True:
 			if(cmd[2]):
 				initPub(cmd[2])
 				msg = getPubMsg()
-				sock.sendto(msg, addr)
+				#print "Im about to send client pub key below"
+				#print msg
+				sock.sendto(msg, ackaddr)
 			else:
 				print "ERROR: There was an error getting the public key from the IOT"
 
