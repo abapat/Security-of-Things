@@ -27,6 +27,7 @@ def init():
 	global table
 	global pubkey
 	global privkey
+	global pubtext
 	global clientPub
 	global sock
 	global broadcast
@@ -52,8 +53,8 @@ def init():
 		s = f.readline()
 
 	#Initialize global public key for IOT
-	pub = open(PUB_KEY_FILE, "r").read()
-	pubkey = RSA.importKey(pub)
+	pubtext = open(PUB_KEY_FILE, "r").read()
+	pubkey = RSA.importKey(pubtext)
 	pubkey = PKCS1_OAEP.new(pubkey)
 
     #Initialize global private key for IOT
@@ -67,7 +68,10 @@ def send(s, msg, addr):
 	sent = False
 	while sent == False:
 		try:
-			s.sendto(msg, addr)
+			numSent = s.sendto(msg, addr)
+			
+			print "I sent :"+str(numSent)+" bytes"
+			print "The length of the message is: "+str(sys.getsizeof(msg))
 			sent = True
 		except IOError, e: #socket.error is subclass
 			if e.errno == 101:
@@ -119,7 +123,9 @@ def checkPass(tup, salt, addr):
 			if pwd == tup[1]:
 				print "its a match!"
 				
-				send(sock, "ACK:ENCRYPT,"+pubkey.publickey().exportKey(), addr)
+				print "pubtext is below "
+				print pubtext
+				send(sock, "ACK:ENCRYPT,"+pubtext, addr)
 				return True
 			else:
 				print "salt :", salt

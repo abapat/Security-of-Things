@@ -18,7 +18,7 @@ def hash_password(password, salt):
 
 def parseMessage(msg):
 	x = []
-	c = msg.split(":")
+	c = msg.split(":",1)
 	x.append(c[0])
 	args = c[1].split(",")
 	for arg in args:
@@ -36,13 +36,19 @@ def connect(msgnum, salt):
 #Initializes the public key of the IOT
 def initPub(pubKey):
 	global IOTpub
+	global IOTpubtext
+
+	print "The recieved key is below"
+	print pubKey
+
+	IOTpubtext = pubKey
 	IOTpub = RSA.importKey(pubKey)
 	IOTpub = PKCS1_OAEP.new(clientPub)
 
 #Creates the public key carrying message to the IOT
 def getPubMsg():
 	msg = "ACK:ENCRYPT,"
-	msg += IOTpub.exportKey()
+	msg += IOTpubtext
 	return msg
 
 #Method to do some setup initializing the public and private keys of the client
@@ -69,7 +75,8 @@ sock.bind(server_address)
 ignoreBrocast = 0
 while True:
 	# Receive response
-	data, server = sock.recvfrom(4096)
+	data, server = sock.recvfrom(8192)
+
 	print "\nim getting my data from :", server
 	if(ignoreBrocast and server[1] != 50001):
 		continue
