@@ -225,7 +225,7 @@ def ack(cmd, addr):
 			clientPubText = cpub
 			clientPub = RSA.importKey(cpub)
 			clientPub = PKCS1_OAEP.new(clientPub)
-			userLoggedIn = True
+			userLoggedIn = addr
 			ret = True
 		#No Public Key Sent
 		else:
@@ -259,8 +259,6 @@ def handleData(s, addr, msg):
 	payload = "You sent IOT: "+payload
 	sendSecure(s, payload, addr)
 
-
-
 #global sock
 #global broadcast
 
@@ -287,6 +285,9 @@ while 1:
 	#print "The message is: \n"+msg
 
 	if(userLoggedIn):
+		#if the message is from a client != connected client, ignore message
+		if(userLoggedIn != server):
+			continue
 		handleData(sock, server, msg)
 	else:
 		cmd = parseMessage(msg)
@@ -299,7 +300,3 @@ while 1:
 
 print("Closing socket")
 sock.close()
-
-
-
-
