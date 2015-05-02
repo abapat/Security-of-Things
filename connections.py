@@ -1,4 +1,4 @@
-import random
+
 
 class Connection:
 	def __init__(self, c, key, n): 
@@ -6,6 +6,7 @@ class Connection:
 		self.conn = c
 		self.pubkey = key
 		self.num = n
+		self.lastMsg = None
 
 class ConnectionHandler:
 	def __init__(self):
@@ -16,12 +17,12 @@ class ConnectionHandler:
 	def addConn(self, tup, key):
 		num = self.size + 1
 		if num > self.max:
-			return False #cannot add another connection, already at max
+			return None #cannot add another connection, already at max
 
 		c = Connection(tup, key, num)
 		self.arr[num-1] = c
 		self.size = num
-		return True
+		return c
 
 	def getConn(self, tup):
 		for c in self.arr:
@@ -30,6 +31,19 @@ class ConnectionHandler:
 
 		return None
 
+	def removeConn(self, tup):
+		i = 0
+		for c in self.arr:
+			if str(c[0]) == str(tup[0]) and str(c[1]) == str(tup[1]):
+				self.size = self.size - 1
+				self.arr[i] = None
+				return True
+
+			i += 1
+		return False
+
+
+'''
 handler = ConnectionHandler()
 for i in range(0,6):
 	ip = random.random() * 100
@@ -37,6 +51,4 @@ for i in range(0,6):
 	key = "key"
 	tup = (ip, port)
 	handler.addConn(tup, key)
-
-print handler.arr
-
+'''
