@@ -30,6 +30,7 @@ def init():
 	global privkey
 	global pubtext
 	global clientPub
+	global clientPubText
 	global sock
 	global broadcast
 	global userLoggedIn
@@ -200,6 +201,8 @@ def getSalt(num):
 #TODO needs error checking on cmd (index out of range if bad arg)
 def ack(cmd, addr):
 	global userLoggedIn
+	global clientPubText
+	global clientPub
 
 	ret = False
 	c = cmd[1] 
@@ -219,6 +222,7 @@ def ack(cmd, addr):
 		#Check to see if a key was sent
 		if(cmd[2]):
 			cpub = cmd[2]
+			clientPubText = cpub
 			clientPub = RSA.importKey(cpub)
 			clientPub = PKCS1_OAEP.new(clientPub)
 			userLoggedIn = True
@@ -235,10 +239,13 @@ def ack(cmd, addr):
 #TODO: handle checking if the connection addr is legit
 #TODO: Handle when the user wants to end the connection
 def handleData(s, addr, msg):
+	print "Encrypted Payload: \n" + msg
 	payload = decrypt_RSA(msg)
 	payload = payload.split(":",1)
 	payload = payload[1]
-	print payload
+	print "Decrypted Payload: \n"+payload
+	payload = "You sent IOT: "+payload
+	send(s, encrypt_RSA(clientPub, payload), addr)
 
 
 
@@ -277,7 +284,6 @@ while 1:
 			if success:
 				sendBrocast = False
 				#break
-	
 
 
 

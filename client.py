@@ -42,17 +42,18 @@ def initPub(pubKey):
 #Creates the public key carrying message to the IOT
 def getPubMsg():
 	msg = "ACK:ENCRYPT,"
-	msg += IOTpubtext
+	msg += clientPubText
 	return msg
 
 #Method to do some setup initializing the public and private keys of the client
 def init():
 	global clientPub
 	global clientPriv
+	global clientPubText
 
 	#Initialize global public key for IOT
-	pub = open(PUB_KEY_FILE, "r").read()
-	clientPub = RSA.importKey(pub)
+	clientPubText = open(PUB_KEY_FILE, "r").read()
+	clientPub = RSA.importKey(clientPubText)
 	clientPub = PKCS1_OAEP.new(clientPub)
 
     #Initialize global private key for IOT
@@ -90,8 +91,8 @@ def decrypt_RSA(package):
 def handleData(s, addr):
 	print "What would you like to send?, enter 'exit' to end"
 	while 1:
-		data = raw_input("\n>")
-		if(data == 'exit\n'):
+		data = raw_input(">")
+		if(data == 'exit'):
 			sys.exit() #End program if user is done sending data
 		else:
 			data = "DATA:"+data
@@ -99,6 +100,15 @@ def handleData(s, addr):
 			print "About to send: \n"+data
 			print "This is encrypted into: \n"+encryptedData
 			s.sendto(encryptedData,addr)
+
+			# Receive response
+			data, server = sock.recvfrom(8192)
+			print "The data received back is:"
+			print data
+
+			decryptedData = decrypt_RSA(data)
+			print "Which when decrypted is: "
+			print decryptedData
 
 #create a UDP socket
 init()
@@ -157,3 +167,6 @@ if(loggedOn):
 	handleData(sock, ackaddr)
 
 sock.close()
+
+
+
