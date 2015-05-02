@@ -49,15 +49,15 @@ def generateRSAKeys(pubName, privName):
 		f.write(binPubKey)
 		f.close()
 
-"""msg = "We attack at dawn"
+msg = "We attack at dawn"
 
 package = encrypt_RSA("/Users/varun/Documents/Stony Brook/Junior Year/2nd Sem/CSE 408/Security-of-Things/IOTrsa.pub",msg)
 
 print "encrypted text = "+package
 
-print "decrypted text = "+decrypt_RSA("/Users/varun/Documents/Stony Brook/Junior Year/2nd Sem/CSE 408/Security-of-Things/IOTrsa",package)"""
+print "decrypted text = "+decrypt_RSA("/Users/varun/Documents/Stony Brook/Junior Year/2nd Sem/CSE 408/Security-of-Things/IOTrsa",package)
 
-generateRSAKeys("IOTrsa","IOTrsa.pub")
+#generateRSAKeys("IOTrsa","IOTrsa.pub")
 
 
 #s.sendto(package, ('localhost', 5000))

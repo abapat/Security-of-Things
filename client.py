@@ -35,15 +35,9 @@ def connect(msgnum, salt):
 
 #Initializes the public key of the IOT
 def initPub(pubKey):
-	global IOTpub
 	global IOTpubtext
 
-	#print "The recieved key is below"
-	#print pubKey
-
 	IOTpubtext = pubKey
-	IOTpub = RSA.importKey(pubKey)
-	IOTpub = PKCS1_OAEP.new(clientPub)
 
 #Creates the public key carrying message to the IOT
 def getPubMsg():
@@ -66,6 +60,46 @@ def init():
 	clientPriv = RSA.importKey(priv)
 	clientPriv = PKCS1_OAEP.new(clientPriv)
 
+
+def encrypt_RSA(public_key, message):
+    '''
+    param: public_key_loc Path to public key
+    param: message String to be encrypted
+    return base64 encoded encrypted string
+    '''
+    key = public_key
+    rsakey = RSA.importKey(key)
+    rsakey = PKCS1_OAEP.new(rsakey)
+    encrypted = rsakey.encrypt(message)
+    return encrypted.encode('base64')
+
+
+def decrypt_RSA(package):
+    '''
+    param: public_key_loc Path to your private key
+    param: package String to be decrypted
+    return decrypted string
+    '''
+    key = open(PRIV_KEY_FILE, "r").read()
+    rsakey = RSA.importKey(key)
+    rsakey = PKCS1_OAEP.new(rsakey)
+    decrypted = rsakey.decrypt(b64decode(package))
+    return decrypted
+
+
+def handleData(s, addr):
+	print "What would you like to send?, enter 'exit' to end"
+	while 1:
+		data = raw_input("\n>")
+		if(data == 'exit\n'):
+			sys.exit() #End program if user is done sending data
+		else:
+			data = "DATA:"+data
+			encryptedData = encrypt_RSA(IOTpubtext,data)
+			print "About to send: \n"+data
+			print "This is encrypted into: \n"+encryptedData
+			s.sendto(encryptedData,addr)
+
 #create a UDP socket
 init()
 sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -73,6 +107,7 @@ server_address = ('', 50000)
 sock.bind(server_address)
 
 ignoreBrocast = 0
+loggedOn = 0
 while True:
 	# Receive response
 	data, server = sock.recvfrom(8192)
@@ -93,12 +128,13 @@ while True:
 		if(cmd[1] == "ENCRYPT") :
 			print "Congrats, we logged on."
 
+			loggedOn = 1 
+			print "Logged on set!"
 			if(cmd[2]):
 				initPub(cmd[2])
 				msg = getPubMsg()
-				#print "Im about to send client pub key below"
-				#print msg
 				sock.sendto(msg, ackaddr)
+				break
 			else:
 				print "ERROR: There was an error getting the public key from the IOT"
 
@@ -114,5 +150,10 @@ while True:
 		ignoreBrocast = 0
 	else :
 		break
+
+
+if(loggedOn):
+	print "About to handle data"
+	handleData(sock, ackaddr)
 
 sock.close()

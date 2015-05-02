@@ -32,8 +32,10 @@ def init():
 	global clientPub
 	global sock
 	global broadcast
+	global userLoggedIn
 
-	
+	userLoggedIn = False
+
 	broadcast = socket(AF_INET, SOCK_DGRAM)
 	broadcast.setsockopt(SOL_SOCKET, SO_REUSEADDR, 1)
 	broadcast.setsockopt(SOL_SOCKET, SO_BROADCAST, 1)
@@ -66,26 +68,24 @@ def init():
 	f.close()
 
 
-def encrypt_RSA(public_key_loc, message):
+def encrypt_RSA(public_key, message):
     '''
     param: public_key_loc Path to public key
     param: message String to be encrypted
     return base64 encoded encrypted string
     '''
-    key = open(public_key_loc, "r").read()
-    rsakey = RSA.importKey(key)
-    rsakey = PKCS1_OAEP.new(rsakey)
-    encrypted = rsakey.encrypt(message)
+    pub = public_key
+    encrypted = pub.encrypt(message)
     return encrypted.encode('base64')
 
 
-def decrypt_RSA(private_key_loc, package):
+def decrypt_RSA(package):
     '''
     param: public_key_loc Path to your private key
     param: package String to be decrypted
     return decrypted string
     '''
-    key = open(private_key_loc, "r").read()
+    key = open(PRIV_KEY_FILE, "r").read()
     rsakey = RSA.importKey(key)
     rsakey = PKCS1_OAEP.new(rsakey)
     decrypted = rsakey.decrypt(b64decode(package))
@@ -153,6 +153,9 @@ def brocast(s, num):
 	return salt
 
 def parseMessage(msg):
+	if(userLoggedIn):
+		return msg
+
 	x = []
 	c = msg.split(":")
 	x.append(c[0])
@@ -163,6 +166,8 @@ def parseMessage(msg):
 	return x
 
 def checkPass(tup, salt, addr):
+	global userLoggedIn
+
 	for login in users:
 		if tup[0] == login[0]: #username match
 			pwd = login[1]
@@ -172,8 +177,8 @@ def checkPass(tup, salt, addr):
 			if pwd == tup[1]:
 				print "its a match!"
 				
-				#print "pubtext is below "
-				#print pubtext
+				userLoggedIn = True
+				print "userLoggedIn = "+str(userLoggedIn)
 
 				send(sock, "ACK:ENCRYPT,"+pubtext, addr)
 				return True
@@ -227,6 +232,16 @@ def ack(cmd, addr):
 
 	return ret
 
+#TODO: handle checking if the connection addr is legit
+def handleData(msg):
+	print "Handling following cipher text:\n" + msg
+	payload = decrypt_RSA(msg)
+	print "The decrypted message is: \n" + payload
+	"""payload = payload.split(":",1)
+	payload = payload[1]
+	print payload"""
+
+
 
 #global sock
 #global broadcast
@@ -242,7 +257,7 @@ while 1:
 	
 	recv = False
 	try:
-		msg, server = sock.recvfrom(4096) #TODO spam protection?
+		msg, server = sock.recvfrom(8192) #TODO spam protection?
 		recv = True
 		#print "message is " + str(msg) + "\nFrom " + str(server)
 	except timeout:
@@ -251,6 +266,8 @@ while 1:
 	if recv == False:
 		continue
 
+	print "The message is: \n"+msg
+
 	cmd = parseMessage(msg)
 	
 	if cmd[0] == "ACK":
@@ -258,8 +275,13 @@ while 1:
 		if success:
 			sendBrocast = False
 			#break
-	else:
-		print("Invalid Command, ignoring")
+	####### SHIT GETS WEIRD HERE ######
+	### With the below code commented, value of msg is correct ###
+	### Otherwise, msg holds the wrong value ###
+	#else:
+		#handleData(msg)
+
+
 
 print("Closing socket")
 sock.close()
