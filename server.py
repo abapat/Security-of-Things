@@ -30,7 +30,6 @@ def init():
 	global privkey
 	global pubtext
 	global clientPub
-	global clientPubText
 	global sock
 	global broadcast
 	global userLoggedIn
@@ -154,8 +153,8 @@ def brocast(s, num):
 	return salt
 
 def parseMessage(msg):
-	#if(userLoggedIn):
-		#return msg
+	if(userLoggedIn):
+		return msg
 
 	x = []
 	c = msg.split(":")
@@ -177,6 +176,9 @@ def checkPass(tup, salt, addr):
 			#success
 			if pwd == tup[1]:
 				print "its a match!"
+				
+				userLoggedIn = True
+				print "userLoggedIn = "+str(userLoggedIn)
 
 				send(sock, "ACK:ENCRYPT,"+pubtext, addr)
 				return True
@@ -200,10 +202,6 @@ def getSalt(num):
 
 #TODO needs error checking on cmd (index out of range if bad arg)
 def ack(cmd, addr):
-	global userLoggedIn
-	global clientPubText
-	global clientPub
-
 	ret = False
 	c = cmd[1] 
 	if c == "PASS":
@@ -216,16 +214,14 @@ def ack(cmd, addr):
 	elif c == "ENCRYPT":
 		#Get the pubic key from the client
 
-		#print "ENCRYPT statement received"
+		print "ENCRYPT statement received"
 		#print cmd[2]
 		
 		#Check to see if a key was sent
 		if(cmd[2]):
 			cpub = cmd[2]
-			clientPubText = cpub
 			clientPub = RSA.importKey(cpub)
 			clientPub = PKCS1_OAEP.new(clientPub)
-			userLoggedIn = True
 			ret = True
 		#No Public Key Sent
 		else:
@@ -237,24 +233,13 @@ def ack(cmd, addr):
 	return ret
 
 #TODO: handle checking if the connection addr is legit
-#TODO: Handle when the user wants to end the connection
-def handleData(s, addr, msg):
-	global sendBrocast, userLoggedIn
-
-	print "Encrypted Payload: \n" + msg
+def handleData(msg):
+	print "Handling following cipher text:\n" + msg
 	payload = decrypt_RSA(msg)
-	payload = payload.split(":",1)
-
-	if(payload[0] == "FIN"):
-		print "FIN command received, exiting!"
-		sendBrocast = True
-		userLoggedIn = False
-		return
-
+	print "The decrypted message is: \n" + payload
+	"""payload = payload.split(":",1)
 	payload = payload[1]
-	print "Decrypted Payload: \n"+payload
-	payload = "You sent IOT: "+payload
-	send(s, encrypt_RSA(clientPub, payload), addr)
+	print payload"""
 
 
 
@@ -265,6 +250,7 @@ init()
 msgCount = 0
 sendBrocast = True
 while 1:
+	msg = False
 	msgCount += 1
 	if sendBrocast == True:
 		salt = brocast(broadcast, msgCount)
@@ -281,18 +267,18 @@ while 1:
 	if recv == False:
 		continue
 
-	#print "The message is: \n"+msg
+	print "The message is: \n"+msg
 
-	if(userLoggedIn):
-		handleData(sock, server, msg)
-	else:
-		cmd = parseMessage(msg)
-		
-		if cmd[0] == "ACK":
-			success = ack(cmd, server)
-			if success:
-				sendBrocast = False
-				#break
+	cmd = parseMessage(msg)
+	print "cmd is :",cmd[0]
+	if cmd[0] == "ACK":
+		success = ack(cmd, server)
+		print "HERE!"
+		if success:
+			sendBrocast = False
+	print "cmd is :",cmd[0]
+	if cmd[0] != "ACK":
+		handleData(msg)
 
 print("Closing socket")
 sock.close()
