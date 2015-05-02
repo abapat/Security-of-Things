@@ -87,20 +87,27 @@ def decrypt_RSA(package):
     decrypted = rsakey.decrypt(b64decode(package))
     return decrypted
 
+#Encrypts a message and sends it over socket
+def sendSecure(s, msg, addr):
+	print "The message is:\n"+msg
+	encryptedMsg = encrypt_RSA(IOTpubtext,msg)
+	print "The encrypted message is:\n"+encryptedMsg
+	s.sendto(encryptedMsg,addr)
+
 
 def handleData(s, addr):
 	print "What would you like to send?, enter 'exit' to end"
 	while 1:
 		data = raw_input(">")
 		if(data == 'exit'):
-			s.sendto(encrypt_RSA(IOTpubtext,"FIN"), addr)
+			sendSecure(s,"FIN:",addr)
 			sys.exit() #End program if user is done sending data
 		else:
 			data = "DATA:"+data
-			encryptedData = encrypt_RSA(IOTpubtext,data)
-			print "About to send: \n"+data
-			print "This is encrypted into: \n"+encryptedData
-			s.sendto(encryptedData,addr)
+			#encryptedData = encrypt_RSA(IOTpubtext,data)
+			#print "About to send: \n"+data
+			#print "This is encrypted into: \n"+encryptedData
+			sendSecure(s, data, addr)
 
 			# Receive response
 			data, server = sock.recvfrom(8192)

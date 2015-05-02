@@ -236,8 +236,11 @@ def ack(cmd, addr):
 
 	return ret
 
+def sendSecure(s, msg, addr):
+	encryptedMsg = encrypt_RSA(clientPub,msg)
+	send(s, encryptedMsg, addr)
+
 #TODO: handle checking if the connection addr is legit
-#TODO: Handle when the user wants to end the connection
 def handleData(s, addr, msg):
 	global sendBrocast, userLoggedIn
 
@@ -254,7 +257,7 @@ def handleData(s, addr, msg):
 	payload = payload[1]
 	print "Decrypted Payload: \n"+payload
 	payload = "You sent IOT: "+payload
-	send(s, encrypt_RSA(clientPub, payload), addr)
+	sendSecure(s, payload, addr)
 
 
 
