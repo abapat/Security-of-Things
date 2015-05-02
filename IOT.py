@@ -242,6 +242,11 @@ def handleData(s, addr, msg):
 	print "Encrypted Payload: \n" + msg
 	payload = decrypt_RSA(msg)
 	payload = payload.split(":",1)
+
+	if(payload[0] == "FIN"):
+		print "FIN command received, exiting!"
+		sys.exit()
+
 	payload = payload[1]
 	print "Decrypted Payload: \n"+payload
 	payload = "You sent IOT: "+payload

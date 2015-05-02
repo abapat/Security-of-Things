@@ -93,6 +93,7 @@ def handleData(s, addr):
 	while 1:
 		data = raw_input(">")
 		if(data == 'exit'):
+			s.sendto(encrypt_RSA(IOTpubtext,"FIN"), addr)
 			sys.exit() #End program if user is done sending data
 		else:
 			data = "DATA:"+data
