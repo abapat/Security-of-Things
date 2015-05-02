@@ -153,8 +153,8 @@ def brocast(s, num):
 	return salt
 
 def parseMessage(msg):
-	if(userLoggedIn):
-		return msg
+	#if(userLoggedIn):
+		#return msg
 
 	x = []
 	c = msg.split(":")
@@ -176,9 +176,6 @@ def checkPass(tup, salt, addr):
 			#success
 			if pwd == tup[1]:
 				print "its a match!"
-				
-				userLoggedIn = True
-				print "userLoggedIn = "+str(userLoggedIn)
 
 				send(sock, "ACK:ENCRYPT,"+pubtext, addr)
 				return True
@@ -202,6 +199,8 @@ def getSalt(num):
 
 #TODO needs error checking on cmd (index out of range if bad arg)
 def ack(cmd, addr):
+	global userLoggedIn
+
 	ret = False
 	c = cmd[1] 
 	if c == "PASS":
@@ -222,6 +221,7 @@ def ack(cmd, addr):
 			cpub = cmd[2]
 			clientPub = RSA.importKey(cpub)
 			clientPub = PKCS1_OAEP.new(clientPub)
+			userLoggedIn = True
 			ret = True
 		#No Public Key Sent
 		else:
@@ -233,13 +233,12 @@ def ack(cmd, addr):
 	return ret
 
 #TODO: handle checking if the connection addr is legit
-def handleData(msg):
-	print "Handling following cipher text:\n" + msg
+#TODO: Handle when the user wants to end the connection
+def handleData(s, addr, msg):
 	payload = decrypt_RSA(msg)
-	print "The decrypted message is: \n" + payload
-	"""payload = payload.split(":",1)
+	payload = payload.split(":",1)
 	payload = payload[1]
-	print payload"""
+	print payload
 
 
 
@@ -266,20 +265,19 @@ while 1:
 	if recv == False:
 		continue
 
-	print "The message is: \n"+msg
+	#print "The message is: \n"+msg
 
-	cmd = parseMessage(msg)
+	if(userLoggedIn):
+		handleData(sock, server, msg)
+	else:
+		cmd = parseMessage(msg)
+		
+		if cmd[0] == "ACK":
+			success = ack(cmd, server)
+			if success:
+				sendBrocast = False
+				#break
 	
-	if cmd[0] == "ACK":
-		success = ack(cmd, server)
-		if success:
-			sendBrocast = False
-			#break
-	####### SHIT GETS WEIRD HERE ######
-	### With the below code commented, value of msg is correct ###
-	### Otherwise, msg holds the wrong value ###
-	#else:
-		#handleData(msg)
 
 
 
