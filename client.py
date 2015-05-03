@@ -56,6 +56,19 @@ PUB_KEY_FILE = "CLIENTrsa.pub"
 PRIV_KEY_FILE = "CLIENTrsa"
 #end defines
 
+def sendSocket(s, msg, addr):
+	sent = False 
+	s.settimeout(30)
+	while sent == False:
+		try:
+			numSent = s.sendto(msg, addr)
+			sent = True
+		except IOError, e: #socket.error is subclass
+			if e.errno == 101:
+				print "No Network connection, trying again later..."
+				time.sleep(60) #check back in a minute
+
+
 def hash_password(password, salt):
 	hashedpassword = hashlib.sha256(password.encode()).hexdigest() 
 	return hashlib.sha256(hashedpassword.encode() + salt.encode()).hexdigest()
@@ -74,7 +87,7 @@ def connect(msgnum, salt):
 	username = raw_input("username : ")
 	password = raw_input("password : ")
 	hashed = hash_password(password, salt)
-	print "salt :", salt
+	#print "salt :", salt
 	return "ACK:PASS,"+msgnum+","+username+","+hashed
 
 #Initializes the public key of the IOT
@@ -136,8 +149,8 @@ def decrypt_RSA(package):
 def sendSecure(s, msg, conn):
 	print "The message is:\n"+msg
 	encryptedMsg = encrypt_RSA(conn.pubkey, msg)
-	print "The encrypted message is:\n"+encryptedMsg
-	s.sendto(encryptedMsg, conn.conn)
+	#print "The encrypted message is:\n"+encryptedMsg
+	sendSocket(s, encryptedMsg, conn.conn)
 
 
 def handleData(s, conn):
@@ -157,15 +170,12 @@ def handleData(s, conn):
 			
 
 def recvSecure(data):
-	print "The data received back is:"
-	print data
+	#print "The data received back is:"
+	#print data
 
 	decryptedData = decrypt_RSA(data)
-	print "Which when decrypted is: "
+	print "Decrypted data: "
 	print decryptedData
-
-
-
 
 #create a UDP socket
 init()
@@ -180,7 +190,7 @@ while True:
 	# Receive response
 	data, server = sock.recvfrom(8192)
 
-	print "\nim getting my data from :", server
+	print "Data received from: ", server
 	if(ignoreBrocast and server[1] != 50001):
 		continue
 
@@ -196,15 +206,15 @@ while True:
 		msg = connect(cmd[2],cmd[1])
 		#changing the port #
 		ackaddr = (server[0], 50001)
-		print "sending", msg, "to", ackaddr
-		sock.sendto(msg, ackaddr)
+		print "Sending ", msg, " to ", ackaddr
+		sendSocket(sock, msg, ackaddr)
 		ignoreBrocast = 1
 	elif(cmd[0] == "ACK") :
 		if(cmd[1] == "ENCRYPT") :
 			print "Congrats, we logged on."
 			conn = ackaddr
 			#loggedOn = 1 
-			print "Logged on set!"
+			#print "Logged on set!"
 			if(cmd[2]):
 				initPub(cmd[2])
 				msg = getPubMsg()
@@ -213,7 +223,7 @@ while True:
 					print "Unable to add IOT, max connections enabled"
 					continue
 
-				sock.sendto(msg, ackaddr)
+				sendSocket(sock, msg, ackaddr)
 
 				handleData(sock, newConn) #send something
 				
