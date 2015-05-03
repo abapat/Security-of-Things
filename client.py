@@ -187,6 +187,8 @@ global handler
 #loggedOn = 0
 while True:
 	# Receive response
+	print ""
+	
 	data, server = sock.recvfrom(8192)
 
 	print "Data received from: ", server
@@ -200,12 +202,15 @@ while True:
 	cmd = parseMessage(data)
 
 	if(cmd[0] == "CONNECT") : 
-		msg = connect(cmd[2],cmd[1])
-		#changing the port #
-		ackaddr = (server[0], 50001)
-		print "Sending ", msg, " to ", ackaddr
-		sendSocket(sock, msg, ackaddr)
-		
+		c = raw_input("Do you want to connect to "+cmd[3]+"? (Y/N) ")
+		if(c == 'Y') :
+			msg = connect(cmd[2],cmd[1])
+			#changing the port #
+			ackaddr = (server[0], 50001)
+			print "Sending ", msg, " to ", ackaddr
+			sendSocket(sock, msg, ackaddr)
+		#elif(c == 'N') :
+			#put in spam numbers
 	elif(cmd[0] == "ACK") :
 		if(cmd[1] == "ENCRYPT") :
 			print "Congrats, we logged on."

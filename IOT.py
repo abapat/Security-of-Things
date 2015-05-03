@@ -288,6 +288,7 @@ while 1:
 	if(userLoggedIn):
 		#if the message is from a client != connected client, ignore message
 		if(userLoggedIn != server):
+			send(s, "Bitch, I'm already connected.", server)
 			continue
 		handleData(sock, server, msg)
 	else:
