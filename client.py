@@ -63,10 +63,9 @@ def sendSocket(s, msg, addr):
 		try:
 			numSent = s.sendto(msg, addr)
 			sent = True
-		except IOError, e: #socket.error is subclass
-			if e.errno == 101:
-				print "No Network connection, trying again later..."
-				time.sleep(60) #check back in a minute
+		except socket.timeout: #socket.error is subclass
+			print "Timeout, trying again later..."
+			time.sleep(60) #check back in a minute
 
 
 def hash_password(password, salt):
@@ -189,7 +188,11 @@ while True:
 	# Receive response
 	print ""
 	
-	data, server = sock.recvfrom(8192)
+	try:
+		data, server = sock.recvfrom(8192)
+	except socket.timeout:
+		continue
+
 
 	print "Data received from: ", server
 
@@ -236,7 +239,7 @@ while True:
 		if(cmd[1] == "USERNAME"):
 			print "ERROR : Invalid Username"
 		if(cmd[1] == "PASSWORD"):
-			print "ERROR : Incorrect Password."
+			print "ERROR : Incorrect Password"
 		if(cmd[1] == "ARGUMENT"):
 			print "ERROR : Bad Argument."
 		if(cmd[1] == "NULLPUBKEY"):
