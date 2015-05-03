@@ -160,7 +160,7 @@ def handleData(s, conn):
 	if(data == 'exit'):
 		sendSecure(s,"FIN:", conn)
 		handler.removeConn(conn.conn)
-		sys.exit() #End program if user is done sending data
+		#sys.exit() #End program if user is done sending data
 	else:
 		data = "DATA:"+data
 		#encryptedData = encrypt_RSA(IOTpubtext,data)
@@ -184,15 +184,12 @@ server_address = ('', 50000)
 sock.bind(server_address)
 
 global handler
-ignoreBrocast = 0
 #loggedOn = 0
 while True:
 	# Receive response
 	data, server = sock.recvfrom(8192)
 
 	print "Data received from: ", server
-	if(ignoreBrocast and server[1] != 50001):
-		continue
 
 	if handler.getConn(server) != None:
 		c = handler.getConn(server)
@@ -208,7 +205,7 @@ while True:
 		ackaddr = (server[0], 50001)
 		print "Sending ", msg, " to ", ackaddr
 		sendSocket(sock, msg, ackaddr)
-		ignoreBrocast = 1
+		
 	elif(cmd[0] == "ACK") :
 		if(cmd[1] == "ENCRYPT") :
 			print "Congrats, we logged on."
@@ -239,7 +236,7 @@ while True:
 			print "ERROR : Bad Argument."
 		if(cmd[1] == "NULLPUBKEY"):
 			print "ERROR: NULL Public Key Sent"
-		ignoreBrocast = 0
+
 	else :
 		break
 
