@@ -176,13 +176,13 @@ def checkPass(tup, salt, addr):
 
 			#success
 			if pwd == tup[1]:
-				print "its a match!"
+				#print "its a match!"
 
 				send(sock, "ACK:ENCRYPT,"+pubtext, addr)
 				return True
 			else:
-				print "salt :", salt
-				print pwd, "!=", tup[1]
+				#print "salt :", salt
+				#print pwd, "!=", tup[1]
 
 				send(sock, "ERROR:PASSWORD", addr)
 				return False
@@ -244,7 +244,7 @@ def sendSecure(s, msg, addr):
 def handleData(s, addr, msg):
 	global sendBrocast, userLoggedIn
 
-	print "Encrypted Payload: \n" + msg
+	#print "Encrypted Payload: \n" + msg
 	payload = decrypt_RSA(msg)
 	payload = payload.split(":",1)
 
@@ -266,6 +266,7 @@ init()
 msgCount = 0
 sendBrocast = True
 while 1:
+	print "";
 	msgCount += 1
 	if sendBrocast == True:
 		salt = brocast(broadcast, msgCount)
