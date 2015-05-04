@@ -56,19 +56,24 @@ class ConnectionHandler:
 #defines
 PUB_KEY_FILE = "CLIENTrsa.pub"		#File that stores the client's public key
 PRIV_KEY_FILE = "CLIENTrsa"			#File used to store the client's private key
-REFRESH_TIMESTEP = 600				#Time 
+REFRESH_TIMESTEP = 600				#Time
+LARGE_PRIME = 105341				#Large prime used for the modulo in the diffie helman seq. exchange 
+RAND_LIMIT = 500000					#Largest allowed random number
 
 blockList = None
 password = None
 #end defines
 
 def sendSocket(s, msg, addr):
+	global seqNum
+
 	sent = False 
 	s.settimeout(30)
 	while sent == False:
 		try:
 			numSent = s.sendto(msg, addr)
 			sent = True
+			seqNum += 1
 		except socket.timeout: #socket.error is subclass
 			print "Timeout, trying again later..."
 			time.sleep(60) #check back in a minute
@@ -110,15 +115,20 @@ def initPub(pubKey):
 '''
 Helper method that creates the message used to tell the IOT the public
 key of this client.
+TODO: Document further
 '''
 def getPubMsg():
+	global secretNum
 	salt = str(uuid.uuid4().hex)
 
 	msg = "ACK:ENCRYPT,"
-	msg += clientPubText
-	msg += hash_password
-	msg += salt
-	msg += rando
+	msg += clientPubText+","
+	msg += hash_password+","
+	msg += salt+","
+	secretNum = long(randint(0,RAND_LIMIT))
+	raisedRand = long(pow(long(3),secretNum))
+	moddedRand = long(raisedRand % long(LARGE_PRIME))
+	msg += moddedRand
 	return msg
 
 '''
@@ -131,6 +141,7 @@ def init():
 	global clientPubText		#Textual form of client's public key (used for sending and things)
 	global handler
 	global blockList			#List of (IP, port) tuples to block
+	global seqNum 				#The sequence number of the next message to send
 
 	#Initialize global public key for client
 	pub = open(PUB_KEY_FILE, "r");
@@ -148,6 +159,7 @@ def init():
 
 	handler = ConnectionHandler()
 	blockList = list()
+
 '''
 This is a method to encrypt a message using a 4096 bit RSA encryption with
 OAEP padding.
@@ -219,6 +231,14 @@ def handleData(s, conn):
 			
 def recvSecure(data):
 	decryptedData = decrypt_RSA(data)
+	try:
+		recievedSeqNum = long(decryptedData.split(",")[5])
+		if(dec != seqNum):
+			print "Incorrect sequence number recieved"
+			return
+	except ValueError:
+		print "Non Integer Sequence Number recieved"
+
 	print "Decrypted data: "
 	print decryptedData
 
@@ -227,6 +247,17 @@ def isLegitServer(pwd, salt):
 	hashed = hash_password(salt)
 	#compare our hashed password w/ server's hashed password
 	return pwd == hashed
+
+def setSeqNum(numString):
+	global seqNum
+
+	try:
+		recievedLong = long(numString)
+		raisedLong = pow(recievedLong,secretNum)
+		moddedLong = raisedLong % long(LARGE_PRIME)
+		seqNum = moddedLong
+	except ValueError:
+		print "Erroenous sequence number sent"
 
 
 #create a UDP socket
@@ -297,6 +328,7 @@ while True:
 			conn = ackaddr
 
 			if(len(cmd) == 5 and isLegitServer(cmd[3], cmd[4])):
+				setSeqNum(cmd[4])
 				initPub(cmd[2])
 				msg = getPubMsg()
 
