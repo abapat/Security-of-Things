@@ -16,6 +16,7 @@ TIMEOUT = 60 #seconds			#Timeout for socket recv/send
 MAX_CACHE = 10 					#Max entries in salt table
 PUB_KEY_FILE = "IOTrsa.pub"		#The file storing the public key of the IOT (4096 bits)
 PRIV_KEY_FILE = "IOTrsa"		#The file storing the private key of the IOT (Never send anywhere)
+REFRESH_TIMESTEP = 3600			#Amount of time it takes before block list is refreshed
 
 blockList = None
 table = None
@@ -51,6 +52,7 @@ def init():
 	table = dict()
 	f = open(PASSWORD_FILE, 'r')
 	s = f.readline()
+	f.close()
 
 	#initialize username,pass
 	l = s.split(",")
@@ -58,16 +60,18 @@ def init():
 	user = tup
 
 	#Initialize global public key for IOT
-	pubtext = open(PUB_KEY_FILE, "r").read()
+	pub =  open(PUB_KEY_FILE, "r");
+	pubtext = pub.read()
 	pubkey = RSA.importKey(pubtext)
 	pubkey = PKCS1_OAEP.new(pubkey)
+	pub.close()
 
     #Initialize global private key for IOT
-	priv = open(PRIV_KEY_FILE, "r").read()
-	privkey = RSA.importKey(priv)
+	priv = open(PRIV_KEY_FILE, "r")
+	privtext = priv.read()
+	privkey = RSA.importKey(privtext)
 	privkey = PKCS1_OAEP.new(privkey)
-
-	f.close()
+	priv.close()
 
 '''
 This is a method to encrypt a message using a 4096 bit RSA encryption with
@@ -115,7 +119,7 @@ def send(s, msg, addr):
 			print "I sent :"+str(numSent)+" bytes"
 			print "The length of the message is: "+str(sys.getsizeof(msg))
 			sent = True
-		except socket.timeout: #socket.error is subclass
+		except timeout: #socket.error is subclass
 			print "No Network connection, trying again later..."
 			time.sleep(60) #check back in a minute
 
@@ -210,7 +214,6 @@ def ack(cmd, addr):
 	global userLoggedIn
 	global clientPubText
 	global clientPub
-	global blockList
 
 	ret = False
 	c = cmd[1] 
@@ -288,13 +291,17 @@ def handleData(s, addr, msg):
 	#Securely send back the slightly modified message
 	sendSecure(s, payload, addr)
 
-
 init()
 msgCount = 0
 sendBrocast = True
+refreshListTime = time.time()
 while 1:
 	print "";
 	#print blockList
+	if(time.time() >= refreshListTime):
+		del blockList[:]
+		refreshListTime = time.time() + REFRESH_TIMESTEP
+
 	msgCount += 1
 	if sendBrocast == True:
 		salt = brocast(broadcast, msgCount)
@@ -305,7 +312,7 @@ while 1:
 		msg, server = sock.recvfrom(8192) 
 		recv = True
 		#print "message is " + str(msg) + "\nFrom " + str(server)
-	except socket.timeout:
+	except timeout:
 		print "Socket timeout, trying again!"
 		continue
 

@@ -2,6 +2,7 @@ import socket
 import sys
 import uuid
 import hashlib
+import time
 from Crypto.PublicKey import RSA
 from Crypto import Random
 from Crypto.Cipher import PKCS1_OAEP
@@ -54,6 +55,9 @@ class ConnectionHandler:
 #defines
 PUB_KEY_FILE = "CLIENTrsa.pub"		#File that stores the client's public key
 PRIV_KEY_FILE = "CLIENTrsa"			#File used to store the client's private key
+REFRESH_TIMESTEP = 300				#Time 
+
+blockList = None
 #end defines
 
 def sendSocket(s, msg, addr):
@@ -63,7 +67,7 @@ def sendSocket(s, msg, addr):
 		try:
 			numSent = s.sendto(msg, addr)
 			sent = True
-		except socket.timeout: #socket.error is subclass
+		except timeout: #socket.error is subclass
 			print "Timeout, trying again later..."
 			time.sleep(60) #check back in a minute
 
@@ -117,19 +121,24 @@ def init():
 	global clientPriv			#Object form of the client's private key (never send)
 	global clientPubText		#Textual form of client's public key (used for sending and things)
 	global handler
+	global blockList			#List of (IP, port) tuples to block
 
-	#Initialize global public key for IOT
-	clientPubText = open(PUB_KEY_FILE, "r").read()
+	#Initialize global public key for client
+	pub = open(PUB_KEY_FILE, "r");
+	clientPubText = pub.read()
 	clientPub = RSA.importKey(clientPubText)
 	clientPub = PKCS1_OAEP.new(clientPub)
+	pub.close()
 
-    #Initialize global private key for IOT
-	priv = open(PRIV_KEY_FILE, "r").read()
-	clientPriv = RSA.importKey(priv)
+    #Initialize global private key for client
+	priv = open(PRIV_KEY_FILE, "r")
+	clientPrivText = priv.read()
+	clientPriv = RSA.importKey(clientPrivText)
 	clientPriv = PKCS1_OAEP.new(clientPriv)
+	priv.close()
 
 	handler = ConnectionHandler()
-
+	blockList = list()
 '''
 This is a method to encrypt a message using a 4096 bit RSA encryption with
 OAEP padding.
@@ -211,20 +220,26 @@ sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 server_address = ('', 50000)
 sock.bind(server_address)
 
+refreshListTime = time.time()
+
 global handler
 #loggedOn = 0
 while True:
 	# Receive response
 	print ""
 	
+	if(time.time() >= refreshListTime):
+		del blockList[:]
+		refreshListTime = time.time() + REFRESH_TIMESTEP
+
 	try:
 		data, server = sock.recvfrom(8192)
-	except socket.timeout:
+	except timeout:
 		continue
 
-
 	print "Data received from: ", server
-
+	if(server in blockList):
+		continue
 	if handler.getConn(server) != None:
 		c = handler.getConn(server)
 		recvSecure(data)
@@ -241,8 +256,9 @@ while True:
 			ackaddr = (server[0], 50001)
 			print "Sending ", msg, " to ", ackaddr
 			sendSocket(sock, msg, ackaddr)
-		#elif(c == 'N') :
+		elif(c == 'N') :
 			#put in spam numbers
+			blockList.append(server)
 	elif(cmd[0] == "ACK") :
 		if(cmd[1] == "ENCRYPT") :
 			print "Congrats, we logged on."
