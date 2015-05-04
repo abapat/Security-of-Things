@@ -222,6 +222,7 @@ server_address = ('', 50000)
 sock.bind(server_address)
 
 refreshListTime = time.time()
+loggingOn = False
 
 global handler
 #loggedOn = 0
@@ -250,12 +251,15 @@ while True:
 	cmd = parseMessage(data)
 
 	if(cmd[0] == "CONNECT") : 
+		if(loggingOn):
+			continue
 		c = raw_input("Do you want to connect to "+cmd[3]+"? (Y/N) ")
 		if(c == 'Y' or c == 'y') :
 			msg = connect(cmd[2],cmd[1])
 			#changing the port #
 			ackaddr = (server[0], 50001)
 			print "Sending ", msg, " to ", ackaddr
+			loggingOn = True
 			sendSocket(sock, msg, ackaddr)
 		elif(c == 'N') :
 			#put in spam numbers
@@ -263,6 +267,7 @@ while True:
 	elif(cmd[0] == "ACK") :
 		if(cmd[1] == "ENCRYPT") :
 			print "Congrats, we logged on."
+			loggingOn = False
 			conn = ackaddr
 			#loggedOn = 1 
 			#print "Logged on set!"
