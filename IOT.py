@@ -355,10 +355,11 @@ def handleData(s, addr, msg):
 
 	if seqNum != int(arr[1]):
 		return
-	else:
-		seqNum = seqNum + 1
 
-	payload = arr[0] + "," + str(seqNum)
+	payload = arr[0] + "," + str(seqNum+1)
+
+	#update to expected seq number
+	seqNum = seqNum + 2
 
 	print "Decrypted Payload: \n"+payload
 	payload = "You sent IOT: "+payload
