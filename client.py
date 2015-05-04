@@ -8,6 +8,7 @@ from Crypto.PublicKey import RSA
 from Crypto import Random
 from Crypto.Cipher import PKCS1_OAEP
 from base64 import b64decode
+import random
 
 class Connection:
 	def __init__(self, c, key, n): 
@@ -64,6 +65,8 @@ blockList = None
 password = None
 #end defines
 
+secretNum = 0
+
 def sendSocket(s, msg, addr):
 	sent = False 
 	s.settimeout(30)
@@ -78,6 +81,7 @@ def sendSocket(s, msg, addr):
 
 def hash_password(salt):
 	hashedpassword = hashlib.sha256(password.encode()).hexdigest() 
+	print "Password hashed only once : "+hashedpassword
 	return hashlib.sha256(hashedpassword.encode() + salt.encode()).hexdigest()
 
 def parseMessage(msg):
@@ -120,12 +124,12 @@ def getPubMsg():
 
 	msg = "ACK:ENCRYPT,"
 	msg += clientPubText+","
-	msg += hash_password+","
+	msg += hash_password(salt)+","
 	msg += salt+","
-	secretNum = long(randint(0,RAND_LIMIT))
+	secretNum = long(random.randint(0,RAND_LIMIT))
 	raisedRand = long(pow(long(3),secretNum))
 	moddedRand = long(raisedRand % long(LARGE_PRIME))
-	msg += moddedRand
+	msg += str(moddedRand)
 	return msg
 
 '''
@@ -227,9 +231,11 @@ def handleData(s, conn):
 		sendSecure(s, data, conn)
 			
 def recvSecure(data):
+	global seqNum
 	decryptedData = decrypt_RSA(data)
 	try:
-		recievedSeqNum = long(decryptedData.split(",")[5])
+		print "Decrypted Data:" + decryptedData
+		recievedSeqNum = long(decryptedData.split(",")[1])
 		if(recievedSeqNum != seqNum+1):
 			print "Incorrect sequence number recieved"
 			return
@@ -330,9 +336,9 @@ while True:
 			conn = ackaddr
 
 			if(len(cmd) == 6 and isLegitServer(cmd[3], cmd[4])):
-				setSeqNum(cmd[5])
 				initPub(cmd[2])
 				msg = getPubMsg()
+				setSeqNum(cmd[5])
 
 				newConn = handler.addConn(conn, IOTpubtext)
 				if newConn == None:

@@ -198,7 +198,7 @@ def checkPass(tup, salt, addr):
 			#re-hash to ensure Encrypt ack is authentic
 			print "Password hash is: " + str(pwd)
 			newsalt = str(uuid.uuid4().hex)
-			newhash = hashlib.sha256(pwd.encode() + newsalt.encode()).hexdigest()
+			newhash = hashlib.sha256(user[1].encode() + newsalt.encode()).hexdigest()
 			print "Sending salted hash: " + str(newhash)
 			diffyH = str(getSecretNum())
 			send(sock, "ACK:ENCRYPT,"+ pubtext + "," + newhash + "," + newsalt + "," + diffyH , addr)
@@ -350,13 +350,15 @@ def handleData(s, addr, msg):
 		userLoggedIn = False
 		return
 
-	if len(arr < 2):
+	if (len(arr) < 2):
 		return
 
 	if seqNum != int(arr[1]):
 		return
 	else:
 		seqNum = seqNum + 1
+
+	payload = arr[0] + "," + str(seqNum)
 
 	print "Decrypted Payload: \n"+payload
 	payload = "You sent IOT: "+payload
