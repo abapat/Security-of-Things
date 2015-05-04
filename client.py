@@ -3,6 +3,7 @@ import sys
 import uuid
 import hashlib
 import time
+import getpass
 from Crypto.PublicKey import RSA
 from Crypto import Random
 from Crypto.Cipher import PKCS1_OAEP
@@ -55,7 +56,7 @@ class ConnectionHandler:
 #defines
 PUB_KEY_FILE = "CLIENTrsa.pub"		#File that stores the client's public key
 PRIV_KEY_FILE = "CLIENTrsa"			#File used to store the client's private key
-REFRESH_TIMESTEP = 300				#Time 
+REFRESH_TIMESTEP = 600				#Time 
 
 blockList = None
 #end defines
@@ -67,7 +68,7 @@ def sendSocket(s, msg, addr):
 		try:
 			numSent = s.sendto(msg, addr)
 			sent = True
-		except timeout: #socket.error is subclass
+		except socket.timeout: #socket.error is subclass
 			print "Timeout, trying again later..."
 			time.sleep(60) #check back in a minute
 
@@ -88,7 +89,7 @@ def parseMessage(msg):
 
 def connect(msgnum, salt):
 	username = raw_input("username : ")
-	password = raw_input("password : ")
+	password = getpass.getpass("password : ")
 	hashed = hash_password(password, salt)
 	#print "salt :", salt
 	return "ACK:PASS,"+msgnum+","+username+","+hashed
@@ -234,7 +235,7 @@ while True:
 
 	try:
 		data, server = sock.recvfrom(8192)
-	except timeout:
+	except socket.timeout:
 		continue
 
 	print "Data received from: ", server
