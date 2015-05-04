@@ -7,35 +7,36 @@ from Crypto.Cipher import PKCS1_OAEP
 from base64 import b64decode
 
 
-#defines
-DEVICE_NAME = "Intel Galileo"
-BROADCAST_PORT = 50000
-RECV_PORT = 50001
-PASSWORD_FILE = 'passwords'
-TIMEOUT = 60 #seconds
-MAX_CACHE = 10
-PUB_KEY_FILE = "IOTrsa.pub"
-PRIV_KEY_FILE = "IOTrsa"
+#DEFINES
+DEVICE_NAME = "Intel Galileo" 	#Name of the device running the script
+BROADCAST_PORT = 50000 			#The port used to broadcast device being alive
+RECV_PORT = 50001 				#Port used to exchange messages with the client
+PASSWORD_FILE = 'passwords'		#File of hashed passwords of clients who use this system i.e. admin
+TIMEOUT = 60 #seconds			#
+MAX_CACHE = 10 					#
+PUB_KEY_FILE = "IOTrsa.pub"		#The file storing the public key of the IOT (4096 bits)
+PRIV_KEY_FILE = "IOTrsa"		#The file storing the private key of the IOT (Never send anywhere)
 
 users = []
 table = None
 sock = None
 broadcast = None
+#END DEFINES
 
 #TODO error checking on file
 def init():
 	global users
 	global table
-	global pubkey
-	global privkey
-	global pubtext
-	global clientPub
-	global clientPubText
+	global pubkey 				#Object form of IOT's public key
+	global privkey 				#Object form of IOT's private key
+	global pubtext 				#Text form of IOT's public key
+	global clientPub 			#This is the public key of the client in object form
+	global clientPubText 		#This is the textual version of the client's pub key
 	global sock
 	global broadcast
-	global userLoggedIn
+	global userLoggedIn			#Flag used to track if a user is currently connected to this IOT
 
-	userLoggedIn = False
+	userLoggedIn = False		
 
 	broadcast = socket(AF_INET, SOCK_DGRAM)
 	broadcast.setsockopt(SOL_SOCKET, SO_REUSEADDR, 1)
@@ -68,38 +69,48 @@ def init():
 
 	f.close()
 
+'''
+This is a method to encrypt a message using a 4096 bit RSA encryption with
+OAEP padding.
 
+It uses the public key of the recipient to encrypt the message. The reciever
+uses their private key to decrypt the message. This is Asymmetric encryption.
+'''
 def encrypt_RSA(public_key, message):
-    '''
-    param: public_key_loc Path to public key
-    param: message String to be encrypted
-    return base64 encoded encrypted string
-    '''
+    
+    #param: public_key Public key object
+    #param: message String to be encrypted
+    #return: base64 encoded encrypted string
+    
     pub = public_key
     encrypted = pub.encrypt(message)
     return encrypted.encode('base64')
 
+'''
+This is the method to decrypt using 4096 but RSA encryption with PKCS1_OAEP
+padding.
 
+It uses this IOT's private key to decrypt the 'package' and return the base64
+decoded decrypted string.
+'''
 def decrypt_RSA(package):
-    '''
-    param: public_key_loc Path to your private key
-    param: package String to be decrypted
-    return decrypted string
-    '''
+    
+    #param: package String to be decrypted
+    #returns: decrypted string
+    
     key = open(PRIV_KEY_FILE, "r").read()
     rsakey = RSA.importKey(key)
     rsakey = PKCS1_OAEP.new(rsakey)
     decrypted = rsakey.decrypt(b64decode(package))
     return decrypted
 
+'''
 
+'''
 def send(s, msg, addr):
 	sent = False
 	while sent == False:
 		try:
-			#if(sys.getsizeof(msg)>300):
-			#	staggeredSend(s, msg, addr)
-			#else:
 			numSent = s.sendto(msg, addr)
 			print "I sent :"+str(numSent)+" bytes"
 			print "The length of the message is: "+str(sys.getsizeof(msg))
@@ -108,25 +119,6 @@ def send(s, msg, addr):
 			if e.errno == 101:
 				print "No Network connection, trying again later..."
 				time.sleep(60) #check back in a minute
-
-def staggeredSend(s, msg, addr):
-	msgLength = sys.getsizeof(msg)
-	piecesNeeded = msgLength/300
-	if(msgLength % 300 != 0):
-		piecesNeeded += 1 #To send the last bit of stuff
-
-	appendString = "ACK:ENCRYPT,"
-	for i in range(0,piecesNeeded):
-		thisChunk = ""
-		if(i == 0):
-			thisChunk = msg[(300*i):]
-		else:
-			thisChunk = appendString + msg[(300*i):]
-
-		thisChunk += ","+str((piecesNeeded-i)-1)
-		print "Sending the following in staggered form: "+thisChunk
-		s.sendto(thisChunk,addr)
-
 
 def cacheSalt(num, salt):
 	global table
@@ -154,8 +146,6 @@ def brocast(s, num):
 	return salt
 
 def parseMessage(msg):
-	#if(userLoggedIn):
-		#return msg
 
 	x = []
 	c = msg.split(":")
@@ -215,9 +205,6 @@ def ack(cmd, addr):
 		#check passwords
 	elif c == "ENCRYPT":
 		#Get the pubic key from the client
-
-		#print "ENCRYPT statement received"
-		#print cmd[2]
 		
 		#Check to see if a key was sent
 		if(cmd[2]):
@@ -227,6 +214,7 @@ def ack(cmd, addr):
 			clientPub = PKCS1_OAEP.new(clientPub)
 			userLoggedIn = addr
 			ret = True
+
 		#No Public Key Sent
 		else:
 			send(s, "ERROR:NULLPUBKEY", addr)
@@ -236,27 +224,50 @@ def ack(cmd, addr):
 
 	return ret
 
+'''
+Method that abstracts the sending of encrypted messages to the 
+client.
+
+Basically encrypts a message and use the send method to ship off
+the encrypted text.
+'''
 def sendSecure(s, msg, addr):
+	# param: s 		The socket used to send messages accross the network
+	# param: msg 	The uncrypted message to send securely to the client
+	# param: addr 	The address of the client we wanna communicate with
+
 	encryptedMsg = encrypt_RSA(clientPub,msg)
 	send(s, encryptedMsg, addr)
 
+'''
+Method that abstracts the handling of data between a connected client and 
+IOT. This ensures that all data between IOT and client is encrypted.
+'''
 #TODO: handle checking if the connection addr is legit
 def handleData(s, addr, msg):
+	# param: s 		Socket used to talk to the client
+	# param: addr 	Address of the client we be talking to
+	# param: msg 	Message received from the client
+
 	global sendBrocast, userLoggedIn
 
-	#print "Encrypted Payload: \n" + msg
+	#Decrypt the msg and parse out the command field
 	payload = decrypt_RSA(msg)
 	payload = payload.split(":",1)
 
+	#Command used by the client to end the connection with the IOT
 	if(payload[0] == "FIN"):
 		print "FIN command received, exiting!"
 		sendBrocast = True
 		userLoggedIn = False
 		return
 
+	#Otherwise the command was DATA
 	payload = payload[1]
 	print "Decrypted Payload: \n"+payload
 	payload = "You sent IOT: "+payload
+
+	#Securely send back the slightly modified message
 	sendSecure(s, payload, addr)
 
 #global sock
@@ -283,14 +294,14 @@ while 1:
 	if recv == False:
 		continue
 
-	#print "The message is: \n"+msg
-
+	#If a connection has been established already, handle data securely
 	if(userLoggedIn):
 		#if the message is from a client != connected client, ignore message
 		if(userLoggedIn != server):
 			send(s, "Bitch, I'm already connected.", server)
 			continue
 		handleData(sock, server, msg)
+	#Otherwise, data does not have to be encrypted (and shouldn't be)
 	else:
 		cmd = parseMessage(msg)
 		

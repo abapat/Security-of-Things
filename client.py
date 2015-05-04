@@ -52,8 +52,8 @@ class ConnectionHandler:
 		return False
 
 #defines
-PUB_KEY_FILE = "CLIENTrsa.pub"
-PRIV_KEY_FILE = "CLIENTrsa"
+PUB_KEY_FILE = "CLIENTrsa.pub"		#File that stores the client's public key
+PRIV_KEY_FILE = "CLIENTrsa"			#File used to store the client's private key
 #end defines
 
 def sendSocket(s, msg, addr):
@@ -89,24 +89,35 @@ def connect(msgnum, salt):
 	#print "salt :", salt
 	return "ACK:PASS,"+msgnum+","+username+","+hashed
 
-#Initializes the public key of the IOT
+'''
+Helper method to initalize the current IOT's public key
+'''
 def initPub(pubKey):
+	#param: pubKey 		The text form public key of this client
+
 	global IOTpubtext
 
 	IOTpubtext = pubKey
 
-#Creates the public key carrying message to the IOT
+'''
+Helper method that creates the message used to tell the IOT the public
+key of this client.
+'''
 def getPubMsg():
 	msg = "ACK:ENCRYPT,"
 	msg += clientPubText
 	return msg
 
-#Method to do some setup initializing the public and private keys of the client
+'''
+Method that initializes the public and private key's of the client as well 
+as the connection handler.
+'''
 def init():
-	global clientPub
-	global clientPriv
-	global clientPubText
+	global clientPub 			#Object form of the client's public key
+	global clientPriv			#Object form of the client's private key (never send)
+	global clientPubText		#Textual form of client's public key (used for sending and things)
 	global handler
+
 	#Initialize global public key for IOT
 	clientPubText = open(PUB_KEY_FILE, "r").read()
 	clientPub = RSA.importKey(clientPubText)
@@ -119,40 +130,64 @@ def init():
 
 	handler = ConnectionHandler()
 
+'''
+This is a method to encrypt a message using a 4096 bit RSA encryption with
+OAEP padding.
+
+It uses the public key of the recipient to encrypt the message. The reciever
+uses their private key to decrypt the message. This is Asymmetric encryption.
+'''
 def encrypt_RSA(public_key, message):
-    '''
-    param: public_key_loc Path to public key
-    param: message String to be encrypted
-    return base64 encoded encrypted string
-    '''
+    
+    #param: public_key 		Textual form of the current IOT's public key
+    #param: message 		Message to be securely sent
+    #returns: encryptedMsg 	Base64 encoded encrypted string
+    
     key = public_key
     rsakey = RSA.importKey(key)
     rsakey = PKCS1_OAEP.new(rsakey)
     encrypted = rsakey.encrypt(message)
     return encrypted.encode('base64')
 
+'''
+This is the method to decrypt using 4096 but RSA encryption with PKCS1_OAEP
+padding.
 
+It uses this IOT's private key to decrypt the 'package' and return the base64
+decoded decrypted string.
+'''
 def decrypt_RSA(package):
-    '''
-    param: public_key_loc Path to your private key
-    param: package String to be decrypted
-    return decrypted string
-    '''
+    #param: package String to be decrypted
+    #returns: decrypted string
+
     key = open(PRIV_KEY_FILE, "r").read()
     rsakey = RSA.importKey(key)
     rsakey = PKCS1_OAEP.new(rsakey)
     decrypted = rsakey.decrypt(b64decode(package))
     return decrypted
 
-#Encrypts a message and sends it over socket
+'''
+Method that abstracts the secure sending of data to the current IOT
+'''
 def sendSecure(s, msg, conn):
+	# param: s 		The socket used to send messages accross the network
+	# param: msg 	The uncrypted message to send securely to the client
+	# param: conn 	The connection object pertaining to the current connected IOT
+
 	print "The message is:\n"+msg
 	encryptedMsg = encrypt_RSA(conn.pubkey, msg)
 	#print "The encrypted message is:\n"+encryptedMsg
 	sendSocket(s, encryptedMsg, conn.conn)
 
 
+'''
+Method that abstracts the secure communication between the client and the
+current IOT
+'''
 def handleData(s, conn):
+	# param: s 		The socket used to send the encrypted data
+	# param: conn 	The connection object pertaining to the current connected IOT
+
 	global handler
 	print "What would you like to send?, enter 'exit' to end"
 	data = raw_input(">")
@@ -162,16 +197,10 @@ def handleData(s, conn):
 		#sys.exit() #End program if user is done sending data
 	else:
 		data = "DATA:"+data
-		#encryptedData = encrypt_RSA(IOTpubtext,data)
-		#print "About to send: \n"+data
-		#print "This is encrypted into: \n"+encryptedData
 		sendSecure(s, data, conn)
 			
 
 def recvSecure(data):
-	#print "The data received back is:"
-	#print data
-
 	decryptedData = decrypt_RSA(data)
 	print "Decrypted data: "
 	print decryptedData
