@@ -1,5 +1,5 @@
 import hashlib, uuid
-import os, sys, time
+import os, sys, time, random
 from socket import *
 from Crypto.PublicKey import RSA
 from Crypto import Random
@@ -17,11 +17,14 @@ MAX_CACHE = 10 					#Max entries in salt table
 PUB_KEY_FILE = "IOTrsa.pub"		#The file storing the public key of the IOT (4096 bits)
 PRIV_KEY_FILE = "IOTrsa"		#The file storing the private key of the IOT (Never send anywhere)
 REFRESH_TIMESTEP = 3600			#Amount of time it takes before block list is refreshed
+MOD = 105341					#large prime number used for diffy-hellmann key exchange
 
 blockList = None
 table = None
 sock = None
 broadcast = None
+secretNum = 0
+seqNum = 0
 #END DEFINES
 
 
@@ -170,6 +173,16 @@ def parseMessage(msg):
 	return x
 
 '''
+Sets secret number for key exchange and returns what to send to client
+'''
+def getSecretNum():
+	global secretNum
+	secretNum = long(random.randint(0, 500000))
+	h = pow(3, secretNum) % MOD
+	return h
+
+
+'''
 Checks recieved password with pass on file by adding the cached salt and hashing again
 '''
 def checkPass(tup, salt, addr):
@@ -182,8 +195,11 @@ def checkPass(tup, salt, addr):
 		#success
 		if pwd == tup[1]:
 			#print "its a match!"
-
-			send(sock, "ACK:ENCRYPT,"+pubtext, addr)
+			#re-hash to ensure Encrypt ack is authentic
+			newsalt = str(uuid.uuid4().hex)
+			newhash = hashlib.sha256(pwd.encode() + newsalt.encode()).hexdigest()
+			diffyH = str(getSecretNum())
+			send(sock, "ACK:ENCRYPT,"+ pubtext + "," + newhash + "," + newsalt + "," + diffyH , addr)
 			return True
 		else:
 			#print "salt :", salt
@@ -205,6 +221,26 @@ def getSalt(num):
 	salt = table.get(num, None)
 	return salt
 
+'''
+Authenitcates received hash 
+'''
+def checkHash(msg, salt):
+	pwd = (hashlib.sha256(user[1].encode() + salt.encode())).hexdigest()
+	if pwd == msg:
+		return True
+
+	return False
+
+def setSeqNum(clientNum):
+	global seqNum
+	try:
+		h = long(clientNum)
+		seqNum = pow(h, secretNum) % MOD
+		return True
+	except ValueError:
+		print "Bad Sequence Number"
+
+	return False
 
 
 '''
@@ -229,6 +265,17 @@ def ack(cmd, addr):
 		
 		#Check to see if a key was sent
 		if(cmd[2]):
+			if len(cmd) < 6:
+				return None
+
+			chk = checkHash(cmd[3] ,cmd[4])
+			if chk == False:
+				return False
+
+			chk = setSeqNum(cmd[5])
+			if chk == False:
+				return False
+
 			cpub = cmd[2]
 			clientPubText = cpub
 			clientPub = RSA.importKey(cpub)
@@ -270,7 +317,7 @@ def handleData(s, addr, msg):
 	# param: addr 	Address of the client we be talking to
 	# param: msg 	Message received from the client
 
-	global sendBrocast, userLoggedIn
+	global sendBrocast, userLoggedIn, seqNum
 
 	#Decrypt the msg and parse out the command field
 	payload = decrypt_RSA(msg)
@@ -283,8 +330,25 @@ def handleData(s, addr, msg):
 		userLoggedIn = False
 		return
 
+	if (payload[0] != "DATA"):
+		return
+
 	#Otherwise the command was DATA
 	payload = payload[1]
+
+	if "," not in payload:
+		return
+
+	arr = payload.split(",")
+
+	if len(arr < 2):
+		return
+
+	if seqNum != int(arr[1]):
+		return
+	else:
+		seqNum = seqNum + 1
+
 	print "Decrypted Payload: \n"+payload
 	payload = "You sent IOT: "+payload
 
