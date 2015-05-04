@@ -244,6 +244,8 @@ def recvSecure(data):
 def isLegitServer(pwd, salt):
 	#hash (client side) password with given salt
 	hashed = hash_password(salt)
+	print "The hash should be: "+hashed
+	print "What i received is: "+ pwd
 	#compare our hashed password w/ server's hashed password
 	return pwd == hashed
 
@@ -323,11 +325,12 @@ while True:
 				break
 	elif(cmd[0] == "ACK") :
 		if(cmd[1] == "ENCRYPT") :
+			print cmd
 			loggingOn = False
 			conn = ackaddr
 
-			if(len(cmd) == 5 and isLegitServer(cmd[3], cmd[4])):
-				setSeqNum(cmd[4])
+			if(len(cmd) == 6 and isLegitServer(cmd[3], cmd[4])):
+				setSeqNum(cmd[5])
 				initPub(cmd[2])
 				msg = getPubMsg()
 
