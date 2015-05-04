@@ -235,7 +235,7 @@ while True:
 
 	if(cmd[0] == "CONNECT") : 
 		c = raw_input("Do you want to connect to "+cmd[3]+"? (Y/N) ")
-		if(c == 'Y') :
+		if(c == 'Y' or c == 'y') :
 			msg = connect(cmd[2],cmd[1])
 			#changing the port #
 			ackaddr = (server[0], 50001)

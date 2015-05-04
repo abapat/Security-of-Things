@@ -12,32 +12,33 @@ DEVICE_NAME = "Intel Galileo" 	#Name of the device running the script
 BROADCAST_PORT = 50000 			#The port used to broadcast device being alive
 RECV_PORT = 50001 				#Port used to exchange messages with the client
 PASSWORD_FILE = 'passwords'		#File of hashed passwords of clients who use this system i.e. admin
-TIMEOUT = 60 #seconds			#
-MAX_CACHE = 10 					#
+TIMEOUT = 60 #seconds			#Timeout for socket recv/send
+MAX_CACHE = 10 					#Max entries in salt table
 PUB_KEY_FILE = "IOTrsa.pub"		#The file storing the public key of the IOT (4096 bits)
 PRIV_KEY_FILE = "IOTrsa"		#The file storing the private key of the IOT (Never send anywhere)
 
-users = []
+blockList = None
 table = None
 sock = None
 broadcast = None
 #END DEFINES
 
-#TODO error checking on file
+
 def init():
-	global users
-	global table
+	global user 				#hash of username, password of user, read in from a file
+	global table 				#keeps track of salt used for message, helps for delayed responses
 	global pubkey 				#Object form of IOT's public key
 	global privkey 				#Object form of IOT's private key
 	global pubtext 				#Text form of IOT's public key
 	global clientPub 			#This is the public key of the client in object form
 	global clientPubText 		#This is the textual version of the client's pub key
-	global sock
-	global broadcast
+	global sock 				#UDP socket used for normal connection
+	global broadcast 			#UDP socket used to broadcast
 	global userLoggedIn			#Flag used to track if a user is currently connected to this IOT
+	global blockList 			#List of (IP, port) tuples to block
 
 	userLoggedIn = False		
-
+	blockList = list()
 	broadcast = socket(AF_INET, SOCK_DGRAM)
 	broadcast.setsockopt(SOL_SOCKET, SO_REUSEADDR, 1)
 	broadcast.setsockopt(SOL_SOCKET, SO_BROADCAST, 1)
@@ -51,11 +52,10 @@ def init():
 	f = open(PASSWORD_FILE, 'r')
 	s = f.readline()
 
-	while (s != ""):
-		l = s.split(",")
-		tup = (l[0], l[1])
-		users.append(tup)
-		s = f.readline()
+	#initialize username,pass
+	l = s.split(",")
+	tup = (l[0], l[1])
+	user = tup
 
 	#Initialize global public key for IOT
 	pubtext = open(PUB_KEY_FILE, "r").read()
@@ -105,7 +105,7 @@ def decrypt_RSA(package):
     return decrypted
 
 '''
-
+Wrapper for sending message, with try catch for timeout error
 '''
 def send(s, msg, addr):
 	sent = False
@@ -115,11 +115,13 @@ def send(s, msg, addr):
 			print "I sent :"+str(numSent)+" bytes"
 			print "The length of the message is: "+str(sys.getsizeof(msg))
 			sent = True
-		except IOError, e: #socket.error is subclass
-			if e.errno == 101:
-				print "No Network connection, trying again later..."
-				time.sleep(60) #check back in a minute
+		except socket.timeout: #socket.error is subclass
+			print "No Network connection, trying again later..."
+			time.sleep(60) #check back in a minute
 
+'''
+adds salt to table, in LRU scheme
+'''
 def cacheSalt(num, salt):
 	global table
 	num = int(num)
@@ -129,7 +131,9 @@ def cacheSalt(num, salt):
 
 	table[num] = salt
 
-#takes UDP socket as input, broadcasts salt to be used in encryption
+'''
+takes UDP socket as input, broadcasts salt to be used in encryption
+'''
 def brocast(s, num):
 	msg = "CONNECT:"
 	salt = str(uuid.uuid4().hex)
@@ -145,7 +149,12 @@ def brocast(s, num):
 
 	return salt
 
+'''
+Parses message in correct protocol
+'''
 def parseMessage(msg):
+	if ":" not in msg:
+		return None
 
 	x = []
 	c = msg.split(":")
@@ -156,43 +165,52 @@ def parseMessage(msg):
 
 	return x
 
+'''
+Checks recieved password with pass on file by adding the cached salt and hashing again
+'''
 def checkPass(tup, salt, addr):
 	global userLoggedIn
 
-	for login in users:
-		if tup[0] == login[0]: #username match
-			pwd = login[1]
-			pwd = (hashlib.sha256(pwd.encode() + salt.encode())).hexdigest()
+	if tup[0] == user[0]: #username match
+		pwd = user[1]
+		pwd = (hashlib.sha256(pwd.encode() + salt.encode())).hexdigest()
 
-			#success
-			if pwd == tup[1]:
-				#print "its a match!"
+		#success
+		if pwd == tup[1]:
+			#print "its a match!"
 
-				send(sock, "ACK:ENCRYPT,"+pubtext, addr)
-				return True
-			else:
-				#print "salt :", salt
-				#print pwd, "!=", tup[1]
+			send(sock, "ACK:ENCRYPT,"+pubtext, addr)
+			return True
+		else:
+			#print "salt :", salt
+			#print pwd, "!=", tup[1]
 
-				send(sock, "ERROR:PASSWORD", addr)
-				return False
-	
+			send(sock, "ERROR:PASSWORD", addr)
+			return False
+
 	#user not found
 	send(sock, "ERROR:USERNAME", addr)
 	return False
 
-#TODO ERROR CHECK FIELDS, CANT ASSUME THEY ARE INTS 
+
+'''
+searches table for salt
+'''
 def getSalt(num):
 	num = int(num)
 	salt = table.get(num, None)
 	return salt
 
 
-#TODO needs error checking on cmd (index out of range if bad arg)
+
+'''
+Processes ACK according to protocol
+'''
 def ack(cmd, addr):
 	global userLoggedIn
 	global clientPubText
 	global clientPub
+	global blockList
 
 	ret = False
 	c = cmd[1] 
@@ -270,14 +288,13 @@ def handleData(s, addr, msg):
 	#Securely send back the slightly modified message
 	sendSecure(s, payload, addr)
 
-#global sock
-#global broadcast
 
 init()
 msgCount = 0
 sendBrocast = True
 while 1:
 	print "";
+	#print blockList
 	msgCount += 1
 	if sendBrocast == True:
 		salt = brocast(broadcast, msgCount)
@@ -285,13 +302,17 @@ while 1:
 	
 	recv = False
 	try:
-		msg, server = sock.recvfrom(8192) #TODO spam protection?
+		msg, server = sock.recvfrom(8192) 
 		recv = True
 		#print "message is " + str(msg) + "\nFrom " + str(server)
-	except timeout:
+	except socket.timeout:
+		print "Socket timeout, trying again!"
 		continue
 
 	if recv == False:
+		continue
+
+	if server in blockList:
 		continue
 
 	#If a connection has been established already, handle data securely
@@ -299,12 +320,17 @@ while 1:
 		#if the message is from a client != connected client, ignore message
 		if(userLoggedIn != server):
 			send(s, "Bitch, I'm already connected.", server)
+			blockList.append(server)
 			continue
+
 		handleData(sock, server, msg)
 	#Otherwise, data does not have to be encrypted (and shouldn't be)
 	else:
 		cmd = parseMessage(msg)
-		
+		if cmd == None: #bad formatting, blocking
+			blockList.append(server)
+			continue
+
 		if cmd[0] == "ACK":
 			success = ack(cmd, server)
 			if success:
