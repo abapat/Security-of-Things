@@ -8,7 +8,7 @@ from base64 import b64decode
 
 
 #DEFINES
-DEVICE_NAME = "Intel Galileo" 	#Name of the device running the script
+DEVICE_NAME = ""			 	#Name of the device running the script
 BROADCAST_PORT = 50000 			#The port used to broadcast device being alive
 RECV_PORT = 50001 				#Port used to exchange messages with the client
 PASSWORD_FILE = 'passwords'		#File of hashed passwords of clients who use this system i.e. admin
@@ -40,6 +40,9 @@ def init():
 	global broadcast 			#UDP socket used to broadcast
 	global userLoggedIn			#Flag used to track if a user is currently connected to this IOT
 	global blockList 			#List of (IP, port) tuples to block
+	global DEVICE_NAME
+
+	DEVICE_NAME = gethostname()
 
 	userLoggedIn = False		
 	blockList = list()
