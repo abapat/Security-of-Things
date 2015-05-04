@@ -196,8 +196,10 @@ def checkPass(tup, salt, addr):
 		if pwd == tup[1]:
 			#print "its a match!"
 			#re-hash to ensure Encrypt ack is authentic
+			print "Password hash is: " + str(pwd)
 			newsalt = str(uuid.uuid4().hex)
 			newhash = hashlib.sha256(pwd.encode() + newsalt.encode()).hexdigest()
+			print "Sending salted hash: " + str(newhash)
 			diffyH = str(getSecretNum())
 			send(sock, "ACK:ENCRYPT,"+ pubtext + "," + newhash + "," + newsalt + "," + diffyH , addr)
 			return True
