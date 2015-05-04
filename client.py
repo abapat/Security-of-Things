@@ -65,15 +65,12 @@ password = None
 #end defines
 
 def sendSocket(s, msg, addr):
-	global seqNum
-
 	sent = False 
 	s.settimeout(30)
 	while sent == False:
 		try:
 			numSent = s.sendto(msg, addr)
 			sent = True
-			seqNum += 1
 		except socket.timeout: #socket.error is subclass
 			print "Timeout, trying again later..."
 			time.sleep(60) #check back in a minute
@@ -222,20 +219,22 @@ def handleData(s, conn):
 	print "What would you like to send?, enter 'exit' to end"
 	data = raw_input(">")
 	if(data == 'exit'):
-		sendSecure(s,"FIN:", conn)
+		sendSecure(s,"FIN:"+str(seqNum), conn)
 		handler.removeConn(conn.conn)
 		#sys.exit() #End program if user is done sending data
 	else:
-		data = "DATA:"+data
+		data = "DATA:"+data+","+str(seqNum)
 		sendSecure(s, data, conn)
 			
 def recvSecure(data):
 	decryptedData = decrypt_RSA(data)
 	try:
 		recievedSeqNum = long(decryptedData.split(",")[5])
-		if(dec != seqNum):
+		if(recievedSeqNum != seqNum+1):
 			print "Incorrect sequence number recieved"
 			return
+		else:
+			seqNum += 2
 	except ValueError:
 		print "Non Integer Sequence Number recieved"
 
