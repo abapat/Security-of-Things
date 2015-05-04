@@ -59,6 +59,7 @@ PRIV_KEY_FILE = "CLIENTrsa"			#File used to store the client's private key
 REFRESH_TIMESTEP = 600				#Time 
 
 blockList = None
+password = None
 #end defines
 
 def sendSocket(s, msg, addr):
@@ -73,7 +74,7 @@ def sendSocket(s, msg, addr):
 			time.sleep(60) #check back in a minute
 
 
-def hash_password(password, salt):
+def hash_password(salt):
 	hashedpassword = hashlib.sha256(password.encode()).hexdigest() 
 	return hashlib.sha256(hashedpassword.encode() + salt.encode()).hexdigest()
 
@@ -88,9 +89,11 @@ def parseMessage(msg):
 	return x
 
 def connect(msgnum, salt):
+	global password
+
 	username = raw_input("username : ")
 	password = getpass.getpass("password : ")
-	hashed = hash_password(password, salt)
+	hashed = hash_password(salt)
 	#print "salt :", salt
 	return "ACK:PASS,"+msgnum+","+username+","+hashed
 
@@ -109,8 +112,13 @@ Helper method that creates the message used to tell the IOT the public
 key of this client.
 '''
 def getPubMsg():
+	salt = str(uuid.uuid4().hex)
+
 	msg = "ACK:ENCRYPT,"
 	msg += clientPubText
+	msg += hash_password
+	msg += salt
+	msg += rando
 	return msg
 
 '''
@@ -209,11 +217,17 @@ def handleData(s, conn):
 		data = "DATA:"+data
 		sendSecure(s, data, conn)
 			
-
 def recvSecure(data):
 	decryptedData = decrypt_RSA(data)
 	print "Decrypted data: "
 	print decryptedData
+
+def isLegitServer(pwd, salt):
+	#hash (client side) password with given salt
+	hashed = hash_password(salt)
+	#compare our hashed password w/ server's hashed password
+	return pwd == hashed
+
 
 #create a UDP socket
 init()
@@ -225,11 +239,11 @@ refreshListTime = time.time()
 loggingOn = False
 
 global handler
-#loggedOn = 0
 while True:
 	# Receive response
 	print ""
 	
+	#if it's time to refresh the list, clear out the block list and update refresh time
 	if(time.time() >= refreshListTime):
 		del blockList[:]
 		refreshListTime = time.time() + REFRESH_TIMESTEP
@@ -240,8 +254,11 @@ while True:
 		continue
 
 	print "Data received from: ", server
+	
+	#if server is being blocked, don't read message
 	if(server in blockList):
 		continue
+
 	if handler.getConn(server) != None:
 		c = handler.getConn(server)
 		recvSecure(data)
@@ -251,34 +268,44 @@ while True:
 	cmd = parseMessage(data)
 
 	if(cmd[0] == "CONNECT") : 
+		#if we're currently trying to log on, ignore other connect messages
 		if(loggingOn):
 			continue
-		c = raw_input("Do you want to connect to "+cmd[3]+"? (Y/N) ")
-		if(c == 'Y' or c == 'y') :
-			msg = connect(cmd[2],cmd[1])
-			#changing the port #
-			ackaddr = (server[0], 50001)
-			print "Sending ", msg, " to ", ackaddr
-			loggingOn = True
-			sendSocket(sock, msg, ackaddr)
-		elif(c == 'N') :
-			#put in spam numbers
-			blockList.append(server)
+
+		#give user the option of not connecting to the device - loop to prevent illegal chars
+		while True:
+			c = raw_input("Do you want to connect to "+cmd[3]+"? (Y/N) ")
+			if(c == 'Y' or c == 'y') :
+				msg = connect(cmd[2],cmd[1])
+				#changing the port # to the port the server would listen to
+				ackaddr = (server[0], 50001)
+				print "Sending ", msg, " to ", ackaddr
+				sendSocket(sock, msg, ackaddr)
+
+				#user is currently trying to log on -> should be true ;P
+				loggingOn = True
+
+				break
+			elif(c == 'N' or c=='y') :
+				#put in spam numbers
+				blockList.append(server)
+
+				break
 	elif(cmd[0] == "ACK") :
 		if(cmd[1] == "ENCRYPT") :
-			print "Congrats, we logged on."
 			loggingOn = False
 			conn = ackaddr
-			#loggedOn = 1 
-			#print "Logged on set!"
-			if(cmd[2]):
+
+			if(len(cmd) == 5 and isLegitServer(cmd[3], cmd[4])):
 				initPub(cmd[2])
 				msg = getPubMsg()
+
 				newConn = handler.addConn(conn, IOTpubtext)
 				if newConn == None:
 					print "Unable to add IOT, max connections enabled"
 					continue
 
+				print "Congrats, we logged on."
 				sendSocket(sock, msg, ackaddr)
 
 				handleData(sock, newConn) #send something
