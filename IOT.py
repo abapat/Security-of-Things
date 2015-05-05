@@ -199,6 +199,7 @@ Sets secret number for key exchange and returns what to send to client
 '''
 def getSecretNum():
 	global secretNum
+
 	secretNum = long(random.randint(0, 500000))
 	h = pow(3, secretNum) % MOD
 	return h
@@ -239,6 +240,9 @@ def checkPass(tup, salt, addr):
 
 '''
 searches table for salt
+
+	@param num 		index of the salt
+	@return salt at index num
 '''
 def getSalt(num):
 	num = int(num)
@@ -247,6 +251,10 @@ def getSalt(num):
 
 '''
 Authenitcates received hash 
+
+	@param msg 
+	@param salt 
+	@return False if the hashed passwords don't match
 '''
 def checkHash(msg, salt):
 	pwd = (hashlib.sha256(user[1].encode() + salt.encode())).hexdigest()
@@ -255,8 +263,16 @@ def checkHash(msg, salt):
 
 	return False
 
+'''
+Sets seq. no. in accordance to diffy-hellmann
+
+	@param clientNum		the client's public number
+	@return False if there was an error in setting up the seq. no
+			True if the seq. no. was set successfully
+'''
 def setSeqNum(clientNum):
 	global seqNum
+
 	try:
 		h = long(clientNum)
 		seqNum = pow(h, secretNum) % MOD
@@ -266,9 +282,13 @@ def setSeqNum(clientNum):
 
 	return False
 
-
 '''
 Processes ACK according to protocol
+
+	@param cmd 		command we're dealing w/
+	@param addr 	address to return messages to
+	@return False if there was a plobrem in the message that was received
+			True if the message was formatted correctly and has valid info
 '''
 def ack(cmd, addr):
 	global userLoggedIn
@@ -290,7 +310,7 @@ def ack(cmd, addr):
 		#Check to see if a key was sent
 		if(cmd[2]):
 			if len(cmd) < 6:
-				return None
+				return False
 
 			chk = checkHash(cmd[3] ,cmd[4])
 			if chk == False:
@@ -336,12 +356,13 @@ def sendSecure(s, msg, addr):
 '''
 Method that abstracts the handling of data between a connected client and 
 IOT. This ensures that all data between IOT and client is encrypted.
+
+	@param s 		Socket used to talk to the client
+	@param addr 	Address of the client we be talking to
+	@param msg  	Message received from the client
 '''
 #TODO: handle checking if the connection addr is legit
 def handleData(s, addr, msg):
-	# param: s 		Socket used to talk to the client
-	# param: addr 	Address of the client we be talking to
-	# param: msg 	Message received from the client
 
 	global sendBrocast, userLoggedIn, seqNum
 
@@ -370,9 +391,11 @@ def handleData(s, addr, msg):
 	payload = payload[1]
 	arr = payload.rsplit(",",1)
 
+	#if insufficent # arguments, return
 	if (len(arr) < 2):
 		return
 
+	#if seq. no. dont match, return
 	if seqNum != int(arr[1]):
 		return
 
@@ -383,7 +406,7 @@ def handleData(s, addr, msg):
 
 	payload = "You sent IOT: "+payload
 	print "Decrypted Payload: \n"+payload
-	
+
 	#Securely send back the slightly modified message
 	sendSecure(s, payload, addr)
 
@@ -398,7 +421,10 @@ while 1:
 		del blockList[:]
 		refreshListTime = time.time() + REFRESH_TIMESTEP
 
+	#increment salt#
 	msgCount += 1
+
+	#send brocast if need to
 	if sendBrocast == True:
 		salt = brocast(broadcast, msgCount)
 		cacheSalt(msgCount, salt)
@@ -412,9 +438,10 @@ while 1:
 		print "Socket timeout, trying again!"
 		continue
 
+	#if no message, just continue loop
 	if recv == False:
 		continue
-
+	#if the sender is blocked, just continue loop
 	if server in blockList:
 		continue
 
@@ -425,8 +452,9 @@ while 1:
 			send(s, "Bitch, I'm already connected.", server)
 			blockList.append(server)
 			continue
-
+		#handle the encrypted message
 		handleData(sock, server, msg)
+
 	#Otherwise, data does not have to be encrypted (and shouldn't be)
 	else:
 		cmd = parseMessage(msg)
