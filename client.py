@@ -437,11 +437,6 @@ while True:
 	else :
 		break
 
-'''
-if(loggedOn):
-	print "About to handle data"
-	handleData(sock, ackaddr)
-'''
 sock.close()
 
 
