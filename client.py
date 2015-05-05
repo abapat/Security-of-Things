@@ -67,7 +67,14 @@ password = None
 
 secretNum = 0
 
-def sendSocket(s, msg, addr):
+'''
+wrapper to send messages across socket to IOT
+
+	@param s 		socket to send stuff through
+	@param msg 		message to send through socket
+	@param addr 	destination of message
+'''
+def sendSocket(s, msg, addr) :
 	sent = False 
 	s.settimeout(30)
 	while sent == False:
@@ -78,36 +85,62 @@ def sendSocket(s, msg, addr):
 			print "Timeout, trying again later..."
 			time.sleep(60) #check back in a minute
 
+'''
+hash password with salt
 
+	@param salt
+	@return hashed and salted password
+'''
 def hash_password(salt):
 	hashedpassword = hashlib.sha256(password.encode()).hexdigest() 
 	print "Password hashed only once : "+hashedpassword
 	return hashlib.sha256(hashedpassword.encode() + salt.encode()).hexdigest()
 
+'''
+parse message according to format - CMD:param1,param2,...,paramN
+	@param msg 		msg received from server to be hashed
+	@return list of cmd and params
+'''
 def parseMessage(msg):
 	x = []
+
+	#get the cmd
 	c = msg.split(":",1)
 	x.append(c[0])
+
+	#get params
 	args = c[1].split(",")
 	for arg in args:
 		x.append(arg)
 
 	return x
 
+'''
+prompts for username, password, hashes password and forms the message
+
+	@param msgnum	num used by server to find corresponding hash more securely
+	@param salt		salt used to hash password
+	@return login message to be sent to IOT
+'''
 def connect(msgnum, salt):
 	global password
 
+	#prompt for username
 	username = raw_input("username : ")
+
+	#get and hash pasword
 	password = getpass.getpass("password : ")
 	hashed = hash_password(salt)
-	#print "salt :", salt
+	
+	#form message
 	return "ACK:PASS,"+msgnum+","+username+","+hashed
 
 '''
 Helper method to initalize the current IOT's public key
+
+	param: pubKey 		The text form public key of this client
 '''
 def initPub(pubKey):
-	#param: pubKey 		The text form public key of this client
 
 	global IOTpubtext
 
@@ -117,6 +150,8 @@ def initPub(pubKey):
 Helper method that creates the message used to tell the IOT the public
 key of this client.
 TODO: Document further
+
+	@return public key message to send to IOT
 '''
 def getPubMsg():
 	global secretNum
@@ -126,9 +161,11 @@ def getPubMsg():
 	msg += clientPubText+","
 	msg += hash_password(salt)+","
 	msg += salt+","
+
 	secretNum = long(random.randint(0,RAND_LIMIT))
 	raisedRand = long(pow(long(3),secretNum))
 	moddedRand = long(raisedRand % long(LARGE_PRIME))
+
 	msg += str(moddedRand)
 	return msg
 
@@ -167,13 +204,12 @@ OAEP padding.
 
 It uses the public key of the recipient to encrypt the message. The reciever
 uses their private key to decrypt the message. This is Asymmetric encryption.
+
+    @param public_key 		Textual form of the current IOT's public key
+    @param message 			Message to be securely sent
+    @return Base64 encoded encrypted string
 '''
 def encrypt_RSA(public_key, message):
-    
-    #param: public_key 		Textual form of the current IOT's public key
-    #param: message 		Message to be securely sent
-    #returns: encryptedMsg 	Base64 encoded encrypted string
-    
     key = public_key
     rsakey = RSA.importKey(key)
     rsakey = PKCS1_OAEP.new(rsakey)
@@ -186,59 +222,71 @@ padding.
 
 It uses this IOT's private key to decrypt the 'package' and return the base64
 decoded decrypted string.
+
+    @param package		String to be decrypted
+    @return decrypted string
 '''
 def decrypt_RSA(package):
-    #param: package String to be decrypted
-    #returns: decrypted string
-
+	#open private key file
     key = open(PRIV_KEY_FILE, "r").read()
     rsakey = RSA.importKey(key)
     rsakey = PKCS1_OAEP.new(rsakey)
+    #decrypt text
     decrypted = rsakey.decrypt(b64decode(package))
     return decrypted
 
 '''
 Method that abstracts the secure sending of data to the current IOT
+	@param s 		The socket used to send messages accross the network
+	@param msg 		The uncrypted message to send securely to the client
+	@param conn 	The connection object pertaining to the current connected IOT
 '''
 def sendSecure(s, msg, conn):
-	# param: s 		The socket used to send messages accross the network
-	# param: msg 	The uncrypted message to send securely to the client
-	# param: conn 	The connection object pertaining to the current connected IOT
-
 	print "The message is:\n"+msg
 	encryptedMsg = encrypt_RSA(conn.pubkey, msg)
 	#print "The encrypted message is:\n"+encryptedMsg
 	sendSocket(s, encryptedMsg, conn.conn)
 
-
 '''
 Method that abstracts the secure communication between the client and the
 current IOT
+
+	@param s 		The socket used to send the encrypted data
+	@param conn 	The connection object pertaining to the current connected IOT
 '''
 def handleData(s, conn):
-	# param: s 		The socket used to send the encrypted data
-	# param: conn 	The connection object pertaining to the current connected IOT
-
 	global handler
+
 	print "What would you like to send?, enter 'exit' to end"
 	data = raw_input(">")
+
+	#if the user types in 'exit', send FIN msg
 	if(data == 'exit'):
 		sendSecure(s,"FIN:"+str(seqNum), conn)
 		handler.removeConn(conn.conn)
-		#sys.exit() #End program if user is done sending data
+	#otherwise, send a data msg
 	else:
 		data = "DATA:"+data+","+str(seqNum)
 		sendSecure(s, data, conn)
-			
+
+'''
+Decrypts data received from server and checks seq. no. to make sure it's valid
+
+	@param data 	data to decrypt
+'''			
 def recvSecure(data):
 	global seqNum
+
+	#decrypt data
 	decryptedData = decrypt_RSA(data)
 	try:
 		print "Decrypted Data:" + decryptedData
+		#check seq. no
 		recievedSeqNum = long(decryptedData.split(",")[1])
 		if(recievedSeqNum != seqNum+1):
 			print "Incorrect sequence number recieved"
 			return
+		#set next seq. no
 		else:
 			seqNum += 2
 	except ValueError:
@@ -247,6 +295,13 @@ def recvSecure(data):
 	print "Decrypted data: "
 	print decryptedData
 
+'''
+authenticates IOT by comparing the password they sent w/ our password
+
+	@param pwd 		password that was sent by IOT
+	@param salt 	salt to apply to our password
+	@return True if password matches
+'''
 def isLegitServer(pwd, salt):
 	#hash (client side) password with given salt
 	hashed = hash_password(salt)
@@ -255,6 +310,11 @@ def isLegitServer(pwd, salt):
 	#compare our hashed password w/ server's hashed password
 	return pwd == hashed
 
+'''
+sets the starting sequence number
+
+	@param numString		public number received by IOT
+'''
 def setSeqNum(numString):
 	global seqNum
 
@@ -324,7 +384,7 @@ while True:
 				loggingOn = True
 
 				break
-			elif(c == 'N' or c=='y') :
+			elif(c == 'N' or c=='n') :
 				#put in spam numbers
 				blockList.append(server)
 
@@ -354,6 +414,7 @@ while True:
 				print "ERROR: There was an error getting the public key from the IOT"
 
 	elif(cmd[0] == "ERROR") :
+		loggingOn = False
 		if(cmd[1] == "USERNAME"):
 			print "ERROR : Invalid Username"
 		if(cmd[1] == "PASSWORD"):

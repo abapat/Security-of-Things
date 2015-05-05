@@ -328,30 +328,26 @@ def handleData(s, addr, msg):
 	payload = decrypt_RSA(msg)
 	payload = payload.split(":",1)
 
-
-	fin = False
 	#Command used by the client to end the connection with the IOT
 	if(payload[0] == "FIN"):
-		fin = True
+		#check sequence number
+		if seqNum != int(payload[1]):
+			return 
+		print "FIN command received, exiting!"
+
+		#start sending brocasts again - now i'm available ;)
+		sendBrocast = True
+		#no user lodged in anymore
+		userLoggedIn = False
+		return
 		
-	if (payload[0] != "DATA"):
+	#invalid command
+	elif (payload[0] != "DATA"):
 		return
 
 	#Otherwise the command was DATA
 	payload = payload[1]
-
-	if "," not in payload:
-		return
-
 	arr = payload.split(",")
-
-	if fin == True:
-		if seqNum != arr[0]:
-			return 
-		print "FIN command received, exiting!"
-		sendBrocast = True
-		userLoggedIn = False
-		return
 
 	if (len(arr) < 2):
 		return
