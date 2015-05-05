@@ -93,12 +93,12 @@ hash password with salt
 '''
 def hash_password(salt):
 	hashedpassword = hashlib.sha256(password.encode()).hexdigest() 
-	print "Password hashed only once : "+hashedpassword
 	return hashlib.sha256(hashedpassword.encode() + salt.encode()).hexdigest()
 
 '''
 parse message according to format - CMD:param1,param2,...,paramN
-	@param msg 		msg received from server to be hashed
+	
+	@param msg 		msg received from server to be parsed
 	@return list of cmd and params
 '''
 def parseMessage(msg):
@@ -256,7 +256,7 @@ current IOT
 '''
 def handleData(s, conn):
 	global handler
-
+	print ""
 	print "What would you like to send?, enter 'exit' to end"
 	data = raw_input(">")
 
@@ -279,10 +279,10 @@ def recvSecure(data):
 
 	#decrypt data
 	decryptedData = decrypt_RSA(data)
+	paramArr = decryptedData.rsplit(",",1)
 	try:
-		print "Decrypted Data:" + decryptedData
 		#check seq. no
-		recievedSeqNum = long(decryptedData.split(",")[1])
+		recievedSeqNum = long(paramArr[1])
 		if(recievedSeqNum != seqNum+1):
 			print "Incorrect sequence number recieved"
 			return
@@ -293,7 +293,7 @@ def recvSecure(data):
 		print "Non Integer Sequence Number recieved"
 
 	print "Decrypted data: "
-	print decryptedData
+	print paramArr[0]
 
 '''
 authenticates IOT by comparing the password they sent w/ our password
@@ -305,8 +305,6 @@ authenticates IOT by comparing the password they sent w/ our password
 def isLegitServer(pwd, salt):
 	#hash (client side) password with given salt
 	hashed = hash_password(salt)
-	print "The hash should be: "+hashed
-	print "What i received is: "+ pwd
 	#compare our hashed password w/ server's hashed password
 	return pwd == hashed
 
@@ -357,14 +355,17 @@ while True:
 	if(server in blockList):
 		continue
 
+	#if the client is connected to an IOT, decrypt message and send encrypted message
 	if handler.getConn(server) != None:
 		c = handler.getConn(server)
 		recvSecure(data)
 		handleData(sock, c)
 		continue
 
+	#parse the command
 	cmd = parseMessage(data)
 
+	#connect message - server asking user to login
 	if(cmd[0] == "CONNECT") : 
 		#if we're currently trying to log on, ignore other connect messages
 		if(loggingOn):
@@ -373,33 +374,42 @@ while True:
 		#give user the option of not connecting to the device - loop to prevent illegal chars
 		while True:
 			c = raw_input("Do you want to connect to "+cmd[3]+"? (Y/N) ")
+			#user tries to log onto IOT
 			if(c == 'Y' or c == 'y') :
 				msg = connect(cmd[2],cmd[1])
 				#changing the port # to the port the server would listen to
 				ackaddr = (server[0], 50001)
-				print "Sending ", msg, " to ", ackaddr
+				#print "Sending ", msg, " to ", ackaddr
 				sendSocket(sock, msg, ackaddr)
 
 				#user is currently trying to log on -> should be true ;P
 				loggingOn = True
 
 				break
+
+			#user doesn't wanna log onto IOT, block brocasts for now
 			elif(c == 'N' or c=='n') :
 				#put in spam numbers
 				blockList.append(server)
 
 				break
+	#ack message / encrypt?
 	elif(cmd[0] == "ACK") :
 		if(cmd[1] == "ENCRYPT") :
-			print cmd
 			loggingOn = False
 			conn = ackaddr
 
+			#check if there is the correct number of arguments and auth. IOT
 			if(len(cmd) == 6 and isLegitServer(cmd[3], cmd[4])):
+				#set up IOT pub. key
 				initPub(cmd[2])
+				#get client pub. key
 				msg = getPubMsg()
+
+				#generate the starting seq. no.
 				setSeqNum(cmd[5])
 
+				#try to add the connection
 				newConn = handler.addConn(conn, IOTpubtext)
 				if newConn == None:
 					print "Unable to add IOT, max connections enabled"
