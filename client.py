@@ -16,7 +16,7 @@ class Connection:
 		self.conn = c
 		self.pubkey = key
 		self.num = n
-		self.lastMsg = None
+		self.last_msg = None
 
 class ConnectionHandler:
 	def __init__(self):
@@ -24,7 +24,7 @@ class ConnectionHandler:
 		self.size = 0
 		self.max = 5
 
-	def addConn(self, tup, key):
+	def add_conn(self, tup, key):
 		num = self.size + 1
 		if num > self.max:
 			return None #cannot add another connection, already at max
@@ -34,7 +34,7 @@ class ConnectionHandler:
 		self.size = num
 		return c
 
-	def getConn(self, tup):
+	def get_conn(self, tup):
 		for c in self.arr:
 			if c == None:
 				continue
@@ -43,7 +43,7 @@ class ConnectionHandler:
 
 		return None
 
-	def removeConn(self, tup):
+	def remove_conn(self, tup):
 		i = 0
 		for c in self.arr:
 			if str(c.conn[0]) == str(tup[0]) and str(c.conn[1]) == str(tup[1]):
@@ -61,11 +61,11 @@ REFRESH_TIMESTEP = 600				#Time
 LARGE_PRIME = 105341				#Large prime used for the modulo in the diffie helman seq. exchange 
 RAND_LIMIT = 500000					#Largest allowed random number
 
-blockList = None
+block_list = None
 password = None
 #end defines
 
-secretNum = 0
+secret_num = 0
 
 '''
 wrapper to send messages across socket to IOT
@@ -74,7 +74,7 @@ wrapper to send messages across socket to IOT
 	@param msg 		message to send through socket
 	@param addr 	destination of message
 '''
-def sendSocket(s, msg, addr) :
+def send_socket(s, msg, addr) :
 	sent = False 
 	s.settimeout(30)
 	while sent == False:
@@ -101,7 +101,7 @@ parse message according to format - CMD:param1,param2,...,paramN
 	@param msg 		msg received from server to be parsed
 	@return list of cmd and params
 '''
-def parseMessage(msg):
+def parse_message(msg):
 	x = []
 
 	#get the cmd
@@ -140,7 +140,7 @@ Helper method to initalize the current IOT's public key
 
 	param: pubKey 		The text form public key of this client
 '''
-def initPub(pubKey):
+def init_pub(pubKey):
 
 	global IOTpubtext
 
@@ -153,8 +153,8 @@ TODO: Document further
 
 	@return public key message to send to IOT
 '''
-def getPubMsg():
-	global secretNum
+def get_pub_msg():
+	global secret_num
 	salt = str(uuid.uuid4().hex)
 
 	msg = "ACK:ENCRYPT,"
@@ -162,8 +162,8 @@ def getPubMsg():
 	msg += hash_password(salt)+","
 	msg += salt+","
 
-	secretNum = long(random.randint(0,RAND_LIMIT))
-	raisedRand = long(pow(long(3),secretNum))
+	secret_num = long(random.randint(0,RAND_LIMIT))
+	raisedRand = long(pow(long(3),secret_num))
 	moddedRand = long(raisedRand % long(LARGE_PRIME))
 
 	msg += str(moddedRand)
@@ -178,8 +178,8 @@ def init():
 	global clientPriv			#Object form of the client's private key (never send)
 	global clientPubText		#Textual form of client's public key (used for sending and things)
 	global handler
-	global blockList			#List of (IP, port) tuples to block
-	global seqNum 				#The sequence number of the next message to send
+	global block_list			#List of (IP, port) tuples to block
+	global seq_num 				#The sequence number of the next message to send
 
 	#Initialize global public key for client
 	pub = open(PUB_KEY_FILE, "r");
@@ -196,7 +196,7 @@ def init():
 	priv.close()
 
 	handler = ConnectionHandler()
-	blockList = list()
+	block_list = list()
 
 '''
 This is a method to encrypt a message using a 4096 bit RSA encryption with
@@ -241,11 +241,11 @@ Method that abstracts the secure sending of data to the current IOT
 	@param msg 		The uncrypted message to send securely to the client
 	@param conn 	The connection object pertaining to the current connected IOT
 '''
-def sendSecure(s, msg, conn):
+def send_secure(s, msg, conn):
 	print "The message is:\n"+msg
-	encryptedMsg = encrypt_RSA(conn.pubkey, msg)
+	encrypted_msg = encrypt_RSA(conn.pubkey, msg)
 	#print "The encrypted message is:\n"+encryptedMsg
-	sendSocket(s, encryptedMsg, conn.conn)
+	send_socket(s, encrypted_msg, conn.conn)
 
 '''
 Method that abstracts the secure communication between the client and the
@@ -254,7 +254,7 @@ current IOT
 	@param s 		The socket used to send the encrypted data
 	@param conn 	The connection object pertaining to the current connected IOT
 '''
-def handleData(s, conn):
+def handle_data(s, conn):
 	global handler
 	print ""
 	print "What would you like to send?, enter 'exit' to end"
@@ -262,38 +262,38 @@ def handleData(s, conn):
 
 	#if the user types in 'exit', send FIN msg
 	if(data == 'exit'):
-		sendSecure(s,"FIN:"+str(seqNum), conn)
-		handler.removeConn(conn.conn)
+		send_secure(s,"FIN:"+str(seq_num), conn)
+		handler.remove_conn(conn.conn)
 	#otherwise, send a data msg
 	else:
-		data = "DATA:"+data+","+str(seqNum)
-		sendSecure(s, data, conn)
+		data = "DATA:"+data+","+str(seq_num)
+		send_secure(s, data, conn)
 
 '''
 Decrypts data received from server and checks seq. no. to make sure it's valid
 
 	@param data 	data to decrypt
 '''			
-def recvSecure(data):
-	global seqNum
+def recv_secure(data):
+	global seq_num
 
 	#decrypt data
-	decryptedData = decrypt_RSA(data)
-	paramArr = decryptedData.rsplit(",",1)
+	decrypted_data = decrypt_RSA(data)
+	param_arr = decrypted_data.rsplit(",",1)
 	try:
 		#check seq. no
-		recievedSeqNum = long(paramArr[1])
-		if(recievedSeqNum != seqNum+1):
+		recieved_seq_num = long(param_arr[1])
+		if(recieved_seq_num != seq_num+1):
 			print "Incorrect sequence number recieved"
 			return
 		#set next seq. no
 		else:
-			seqNum += 2
+			seq_num += 2
 	except ValueError:
 		print "Non Integer Sequence Number recieved"
 
 	print "Decrypted data: "
-	print paramArr[0]
+	print param_arr[0]
 
 '''
 authenticates IOT by comparing the password they sent w/ our password
@@ -302,7 +302,7 @@ authenticates IOT by comparing the password they sent w/ our password
 	@param salt 	salt to apply to our password
 	@return True if password matches
 '''
-def isLegitServer(pwd, salt):
+def is_legit_server(pwd, salt):
 	#hash (client side) password with given salt
 	hashed = hash_password(salt)
 	#compare our hashed password w/ server's hashed password
@@ -313,14 +313,14 @@ sets the starting sequence number
 
 	@param numString		public number received by IOT
 '''
-def setSeqNum(numString):
-	global seqNum
+def set_seq_num(num_string):
+	global seq_num
 
 	try:
-		recievedLong = long(numString)
-		raisedLong = pow(recievedLong,secretNum)
-		moddedLong = raisedLong % long(LARGE_PRIME)
-		seqNum = moddedLong
+		recieved_long = long(num_string)
+		raised_long = pow(recieved_long,secret_num)
+		modded_long = raised_long % long(LARGE_PRIME)
+		seq_num = modded_long
 	except ValueError:
 		print "Erroenous sequence number sent"
 
@@ -331,8 +331,8 @@ sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 server_address = ('', 50000)
 sock.bind(server_address)
 
-refreshListTime = time.time()
-loggingOn = False
+refresh_list_time = time.time()
+logging_on = False
 
 global handler
 while True:
@@ -340,9 +340,9 @@ while True:
 	print ""
 	
 	#if it's time to refresh the list, clear out the block list and update refresh time
-	if(time.time() >= refreshListTime):
-		del blockList[:]
-		refreshListTime = time.time() + REFRESH_TIMESTEP
+	if(time.time() >= refresh_list_time):
+		del block_list[:]
+		refresh_list_time = time.time() + REFRESH_TIMESTEP
 
 	try:
 		data, server = sock.recvfrom(8192)
@@ -352,23 +352,23 @@ while True:
 	print "Data received from: ", server
 	
 	#if server is being blocked, don't read message
-	if(server in blockList):
+	if(server in block_list):
 		continue
 
 	#if the client is connected to an IOT, decrypt message and send encrypted message
-	if handler.getConn(server) != None:
-		c = handler.getConn(server)
-		recvSecure(data)
-		handleData(sock, c)
+	if handler.get_conn(server) != None:
+		c = handler.get_conn(server)
+		recv_secure(data)
+		handle_data(sock, c)
 		continue
 
 	#parse the command
-	cmd = parseMessage(data)
+	cmd = parse_message(data)
 
 	#connect message - server asking user to login
 	if(cmd[0] == "CONNECT") : 
 		#if we're currently trying to log on, ignore other connect messages
-		if(loggingOn):
+		if(logging_on):
 			continue
 
 		#give user the option of not connecting to the device - loop to prevent illegal chars
@@ -380,51 +380,51 @@ while True:
 				#changing the port # to the port the server would listen to
 				ackaddr = (server[0], 50001)
 				#print "Sending ", msg, " to ", ackaddr
-				sendSocket(sock, msg, ackaddr)
+				send_socket(sock, msg, ackaddr)
 
 				#user is currently trying to log on -> should be true ;P
-				loggingOn = True
+				logging_on = True
 
 				break
 
 			#user doesn't wanna log onto IOT, block brocasts for now
 			elif(c == 'N' or c=='n') :
 				#put in spam numbers
-				blockList.append(server)
+				block_list.append(server)
 
 				break
 	#ack message / encrypt?
 	elif(cmd[0] == "ACK") :
 		if(cmd[1] == "ENCRYPT") :
-			loggingOn = False
+			logging_on = False
 			conn = ackaddr
 
 			#check if there is the correct number of arguments and auth. IOT
-			if(len(cmd) == 6 and isLegitServer(cmd[3], cmd[4])):
+			if(len(cmd) == 6 and is_legit_server(cmd[3], cmd[4])):
 				#set up IOT pub. key
-				initPub(cmd[2])
+				init_pub(cmd[2])
 				#get client pub. key
-				msg = getPubMsg()
+				msg = get_pub_msg()
 
 				#generate the starting seq. no.
-				setSeqNum(cmd[5])
+				set_seq_num(cmd[5])
 
 				#try to add the connection
-				newConn = handler.addConn(conn, IOTpubtext)
-				if newConn == None:
+				new_conn = handler.add_conn(conn, IOTpubtext)
+				if new_conn == None:
 					print "Unable to add IOT, max connections enabled"
 					continue
 
 				print "Congrats, we logged on."
-				sendSocket(sock, msg, ackaddr)
+				send_socket(sock, msg, ackaddr)
 
-				handleData(sock, newConn) #send something
+				handle_data(sock, new_conn) #send something
 				
 			else:
 				print "ERROR: There was an error getting the public key from the IOT"
 
 	elif(cmd[0] == "ERROR") :
-		loggingOn = False
+		logging_on = False
 		if(cmd[1] == "USERNAME"):
 			print "ERROR : Invalid Username"
 		if(cmd[1] == "PASSWORD"):
