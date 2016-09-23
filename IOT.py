@@ -5,7 +5,7 @@ from Crypto.PublicKey import RSA
 from Crypto import Random
 from Crypto.Cipher import PKCS1_OAEP
 from base64 import b64decode
-
+from pymongo import MongoClient
 
 #DEFINES
 DEVICE_NAME = ""			 	#Name of the device running the script
@@ -31,7 +31,7 @@ seq_num = 0
 initialize the global variables such as public/private key info
 '''
 def init():
-	global user 				#hash of username, password of user, read in from a file
+	global user 				#username of current user
 	global table 				#keeps track of salt used for message, helps for delayed responses
 	global pubkey 				#Object form of IOT's public key
 	global privkey 				#Object form of IOT's private key
@@ -58,6 +58,7 @@ def init():
 
 
 	table = dict()
+	'''
 	f = open(PASSWORD_FILE, 'r')
 	s = f.readline()
 	f.close()
@@ -66,7 +67,7 @@ def init():
 	l = s.split(",")
 	tup = (l[0], l[1])
 	user = tup
-
+	'''
 	#Initialize global public key for IOT
 	pub =  open(PUB_KEY_FILE, "r");
 	pubtext = pub.read()
@@ -205,39 +206,53 @@ def get_secret_num():
 	return h
 
 '''
-Checks recieved password with pass on file by adding the cached salt and hashing again
+Checks recieved password with pass from db by adding the cached salt and hashing again
 
-	@param tup 		username/password tuple
+	@param username	given username
+	@param password given password
 	@param salt 	salt used to verify password
 	@param addr 	addr. to send message to
 	@return True if user successfully logged on. False otherwise
 '''
-def check_pass(tup, salt, addr):
+def check_pass(username, password, salt, addr):
 	global user_logged_in
+	global user
 
-	if tup[0] == user[0]: #username match
-		pwd = user[1]
-		pwd = (hashlib.sha256(pwd.encode() + salt.encode())).hexdigest()
+	if check_hash(username, password, salt) is False:
+		#user not found
+		send(sock, "ERROR:LOGIN", addr)
+		return False
 
-		#success
-		if pwd == tup[1]:
-			#re-hash to ensure Encrypt ack is authentic
-			
-			newsalt = str(uuid.uuid4().hex)
-			newhash = hashlib.sha256(user[1].encode() + newsalt.encode()).hexdigest()
-			
-			diffyH = str(get_secret_num())
-			send(sock, "ACK:ENCRYPT,"+ pubtext + "," + newhash + "," + newsalt + "," + diffyH , addr)
-			return True
-		else:
-			send(sock, "ERROR:PASSWORD", addr)
-			return False
+	#login successful
+	user = username
+	#re-hash password to ensure Encrypt ack is authentic
+	newsalt = str(uuid.uuid4().hex)
+	newhash = hash_password(newsalt)
+	diffyH = str(get_secret_num())
+	send(sock, "ACK:ENCRYPT,"+ pubtext + "," + newhash + "," + newsalt + "," + diffyH , addr)
+	return True
 
-	#user not found
-	send(sock, "ERROR:USERNAME", addr)
-	return False
+'''
+hashes salts current user's password
+	@param salt - salt used for augmenting the hashed password
+	@return None if user information is incorrect
+		hashed and salted password otherwise
+'''
+def hash_password(salt):
+	if user is None:
+		return None
 
+	client = MongoClient()
+	db = client.IOT.login_info
 
+	entry = db.find_one({"username": user})	
+	print "ENTRY > > > ", entry
+	if entry is None:
+		return None
+	
+	return hashlib.sha256(entry["password"].encode() + \
+		salt.encode()).hexdigest()
+	
 '''
 searches table for salt
 
@@ -251,17 +266,24 @@ def get_salt(num):
 
 '''
 Authenitcates received hash 
-
-	@param msg 
-	@param salt 
+	@param username - given username
+	@param password - given password 
+	@param salt	- salt used to offset hash 
 	@return False if the hashed passwords don't match
 '''
-def check_hash(msg, salt):
-	pwd = (hashlib.sha256(user[1].encode() + salt.encode())).hexdigest()
-	if pwd == msg:
-		return True
+def check_hash(username, password, salt):	
+	#connect to mongodb
+	client = MongoClient()
+	db = client.IOT.login_info
+	entry = db.find_one({"username" : username})
 
-	return False
+	if entry is None: #username dont match
+		return False
+
+	pwd = entry["password"]
+	pwd = (hashlib.sha256(pwd.encode() + salt.encode())).hexdigest()
+
+	return pwd == password
 
 '''
 Sets seq. no. in accordance to diffy-hellmann
@@ -301,8 +323,7 @@ def ack(cmd, addr):
 		salt = get_salt(cmd[2])
 		if salt == None:
 			return False
-		tup = (cmd[3], cmd[4])
-		ret = check_pass(tup, salt, addr)
+		ret = check_pass(cmd[3], cmd[4], salt, addr)
 		#check passwords
 	elif c == "ENCRYPT":
 		#Get the pubic key from the client
@@ -312,7 +333,7 @@ def ack(cmd, addr):
 			if len(cmd) < 6:
 				return False
 
-			chk = check_hash(cmd[3] ,cmd[4])
+			chk = check_hash(user, cmd[3] ,cmd[4])
 			if chk == False:
 				return False
 
@@ -364,7 +385,7 @@ IOT. This ensures that all data between IOT and client is encrypted.
 #TODO: handle checking if the connection addr is legit
 def handle_data(s, addr, msg):
 
-	global send_brocast, user_logged_in, seq_num
+	global send_brocast, user_logged_in, seq_num, user
 
 	#Decrypt the msg and parse out the command field
 	payload = decrypt_RSA(msg)
@@ -381,6 +402,7 @@ def handle_data(s, addr, msg):
 		send_brocast = True
 		#no user lodged in anymore
 		user_logged_in = False
+		user = None
 		return
 
 	#invalid command

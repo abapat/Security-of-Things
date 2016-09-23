@@ -425,14 +425,12 @@ while True:
 
 	elif(cmd[0] == "ERROR") :
 		logging_on = False
-		if(cmd[1] == "USERNAME"):
-			print "ERROR : Invalid Username"
-		if(cmd[1] == "PASSWORD"):
-			print "ERROR : Incorrect Password"
+		if(cmd[1] == "LOGIN"):
+			print "ERROR : Invalid username/password."
 		if(cmd[1] == "ARGUMENT"):
-			print "ERROR : Bad Argument."
+			print "ERROR : Bad argument."
 		if(cmd[1] == "NULLPUBKEY"):
-			print "ERROR: NULL Public Key Sent"
+			print "ERROR: Null public key sent."
 
 	else :
 		break
