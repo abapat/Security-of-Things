@@ -4,6 +4,7 @@ import uuid
 import hashlib
 import time
 import getpass
+import messaging_util
 from Crypto.PublicKey import RSA
 from Crypto import Random
 from Crypto.Cipher import PKCS1_OAEP
@@ -66,6 +67,7 @@ password = None
 #end defines
 
 secret_num = 0
+iot_salt = None
 
 '''
 wrapper to send messages across socket to IOT
@@ -101,7 +103,7 @@ parse message according to format - CMD:param1,param2,...,paramN
 	@param msg 		msg received from server to be parsed
 	@return list of cmd and params
 '''
-def parse_message(msg):
+'''def parse_message(msg):
 	x = []
 
 	#get the cmd
@@ -114,6 +116,7 @@ def parse_message(msg):
 		x.append(arg)
 
 	return x
+'''
 
 '''
 prompts for username, password, hashes password and forms the message
@@ -124,6 +127,7 @@ prompts for username, password, hashes password and forms the message
 '''
 def connect(msgnum, salt):
 	global password
+	global iot_salt
 
 	#prompt for username
 	username = raw_input("username : ")
@@ -132,8 +136,13 @@ def connect(msgnum, salt):
 	password = getpass.getpass("password : ")
 	hashed = hash_password(salt)
 	
+	#set up salt to test iot
+	iot_salt = str(uuid.uuid4().hex)
+
+	#set up diffie hellman numbers
+	diffie_pub = get_diffie_nums()
 	#form message
-	return "ACK:PASS,"+msgnum+","+username+","+hashed
+	return "ACK:PASS,"+msgnum+","+username+","+hashed+","+iot_salt+","+diffie_pub+","+clientPubText
 
 '''
 Helper method to initalize the current IOT's public key
@@ -153,8 +162,7 @@ TODO: Document further
 
 	@return public key message to send to IOT
 '''
-def get_pub_msg():
-	global secret_num
+'''def get_pub_msg():
 	salt = str(uuid.uuid4().hex)
 
 	msg = "ACK:ENCRYPT,"
@@ -162,12 +170,22 @@ def get_pub_msg():
 	msg += hash_password(salt)+","
 	msg += salt+","
 
+
+	msg += get_diffie_nums()
+	return msg
+'''
+'''
+Sets secret number for key exchange and returns what to send to client
+
+	@return public number to send to client for diffy-hellmann
+'''
+def get_diffie_nums():
+	global secret_num
+
 	secret_num = long(random.randint(0,RAND_LIMIT))
 	raisedRand = long(pow(long(3),secret_num))
 	moddedRand = long(raisedRand % long(LARGE_PRIME))
-
-	msg += str(moddedRand)
-	return msg
+	return str(moddedRand)
 
 '''
 Method that initializes the public and private key's of the client as well 
@@ -322,7 +340,7 @@ def set_seq_num(num_string):
 		modded_long = raised_long % long(LARGE_PRIME)
 		seq_num = modded_long
 	except ValueError:
-		print "Erroenous sequence number sent"
+		print "Erroneous sequence number sent"
 
 
 #create a UDP socket
@@ -363,7 +381,7 @@ while True:
 		continue
 
 	#parse the command
-	cmd = parse_message(data)
+	cmd = messaging_util.parse_message(data)
 
 	#connect message - server asking user to login
 	if(cmd[0] == "CONNECT") : 
@@ -400,14 +418,14 @@ while True:
 			conn = ackaddr
 
 			#check if there is the correct number of arguments and auth. IOT
-			if(len(cmd) == 6 and is_legit_server(cmd[3], cmd[4])):
+			if(len(cmd) == 5 and is_legit_server(cmd[3], iot_salt)):
 				#set up IOT pub. key
 				init_pub(cmd[2])
 				#get client pub. key
-				msg = get_pub_msg()
+				#msg = get_pub_msg()
 
 				#generate the starting seq. no.
-				set_seq_num(cmd[5])
+				set_seq_num(cmd[4])
 
 				#try to add the connection
 				new_conn = handler.add_conn(conn, IOTpubtext)
@@ -416,7 +434,7 @@ while True:
 					continue
 
 				print "Congrats, we logged on."
-				send_socket(sock, msg, ackaddr)
+				#send_socket(sock, msg, ackaddr)
 
 				handle_data(sock, new_conn) #send something
 				

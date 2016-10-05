@@ -1,5 +1,6 @@
 import hashlib, uuid
 import os, sys, time, random
+import messaging_util
 from socket import *
 from Crypto.PublicKey import RSA
 from Crypto import Random
@@ -11,13 +12,13 @@ from pymongo import MongoClient
 DEVICE_NAME = ""			 	#Name of the device running the script
 BROADCAST_PORT = 50000 			#The port used to broadcast device being alive
 RECV_PORT = 50001 				#Port used to exchange messages with the client
-PASSWORD_FILE = 'passwords'		#File of hashed passwords of clients who use this system i.e. admin
 TIMEOUT = 60 #seconds			#Timeout for socket recv/send
 MAX_CACHE = 10 					#Max entries in salt table
 PUB_KEY_FILE = "IOTrsa.pub"		#The file storing the public key of the IOT (4096 bits)
 PRIV_KEY_FILE = "IOTrsa"		#The file storing the private key of the IOT (Never send anywhere)
 REFRESH_TIMESTEP = 3600			#Amount of time it takes before block list is refreshed
-MOD = 105341					#large prime number used for diffy-hellmann key exchange
+LARGE_PRIME = 105341			#large prime number used for diffy-hellmann key exchange
+RAND_LIMIT = 500000				#Largest allowed random number
 
 block_list = None
 table = None
@@ -31,21 +32,21 @@ seq_num = 0
 initialize the global variables such as public/private key info
 '''
 def init():
-	global user 				#username of current user
-	global table 				#keeps track of salt used for message, helps for delayed responses
-	global pubkey 				#Object form of IOT's public key
-	global privkey 				#Object form of IOT's private key
-	global pubtext 				#Text form of IOT's public key
-	global client_pub 			#This is the public key of the client in object form
-	global client_pub_text 		#This is the textual version of the client's pub key
-	global sock 				#UDP socket used for normal connection
-	global broadcast 			#UDP socket used to broadcast
-	global user_logged_in			#Flag used to track if a user is currently connected to this IOT
-	global block_list 			#List of (IP, port) tuples to block
+	global user 			#username of current user
+	global table 			#keeps track of salt used for message, helps for delayed responses
+	global pubkey 			#Object form of IOT's public key
+	global privkey 			#Object form of IOT's private key
+	global pubtext 			#Text form of IOT's public key
+	global client_pub 		#public key of the client in object form
+	global client_pub_text 		#textual version of the client's pub key
+	global sock 			#UDP socket used for normal connection
+	global broadcast 		#UDP socket used to broadcast
+	global user_logged_in		#Flag used to track if a user is currently connected to this IOT
+	global block_list 		#List of (IP, port) tuples to block
 	global DEVICE_NAME
 
 	DEVICE_NAME = gethostname()
-
+	user = None
 	user_logged_in = False		
 	block_list = list()
 	broadcast = socket(AF_INET, SOCK_DGRAM)
@@ -56,18 +57,8 @@ def init():
 	sock.bind(('', RECV_PORT))
 	sock.settimeout(TIMEOUT)
 
-
 	table = dict()
-	'''
-	f = open(PASSWORD_FILE, 'r')
-	s = f.readline()
-	f.close()
-
-	#initialize username,pass
-	l = s.split(",")
-	tup = (l[0], l[1])
-	user = tup
-	'''
+	
 	#Initialize global public key for IOT
 	pub =  open(PUB_KEY_FILE, "r");
 	pubtext = pub.read()
@@ -75,7 +66,7 @@ def init():
 	pubkey = PKCS1_OAEP.new(pubkey)
 	pub.close()
 
-    #Initialize global private key for IOT
+	#Initialize global private key for IOT
 	priv = open(PRIV_KEY_FILE, "r")
 	privtext = priv.read()
 	privkey = RSA.importKey(privtext)
@@ -175,7 +166,7 @@ Parses message in correct protocol - CMD:param1,param2,...,paramN
 	@param msg 		message from server to be parsed
 	@return list of cmd and params
 '''
-def parse_message(msg):
+'''def parse_message(msg):
 	#check for cmd part
 	if ":" not in msg:
 		return None
@@ -192,17 +183,18 @@ def parse_message(msg):
 		x.append(arg)
 
 	return x
+'''
 
 '''
 Sets secret number for key exchange and returns what to send to client
 
 	@return public number to send to client for diffy-hellmann
 '''
-def get_secret_num():
+def get_diffie_nums():
 	global secret_num
 
-	secret_num = long(random.randint(0, 500000))
-	h = pow(3, secret_num) % MOD
+	secret_num = long(random.randint(0, RAND_LIMIT))
+	h = pow(3, secret_num) % LARGE_PRIME
 	return h
 
 '''
@@ -214,22 +206,25 @@ Checks recieved password with pass from db by adding the cached salt and hashing
 	@param addr 	addr. to send message to
 	@return True if user successfully logged on. False otherwise
 '''
-def check_pass(username, password, salt, addr):
+def login(username, password, salt, new_salt, addr):
 	global user_logged_in
 	global user
 
-	if check_hash(username, password, salt) is False:
+	if check_password(username, password, salt) is False:
 		#user not found
 		send(sock, "ERROR:LOGIN", addr)
 		return False
 
 	#login successful
 	user = username
+
 	#re-hash password to ensure Encrypt ack is authentic
-	newsalt = str(uuid.uuid4().hex)
-	newhash = hash_password(newsalt)
-	diffyH = str(get_secret_num())
-	send(sock, "ACK:ENCRYPT,"+ pubtext + "," + newhash + "," + newsalt + "," + diffyH , addr)
+	newhash = hash_password(new_salt)
+
+	#do diffie stuff
+	diffyH = str(get_diffie_nums())
+
+	send(sock, "ACK:ENCRYPT,"+ pubtext + "," + newhash + "," + diffyH, addr)
 	return True
 
 '''
@@ -271,7 +266,7 @@ Authenitcates received hash
 	@param salt	- salt used to offset hash 
 	@return False if the hashed passwords don't match
 '''
-def check_hash(username, password, salt):	
+def check_password(username, password, salt):	
 	#connect to mongodb
 	client = MongoClient()
 	db = client.IOT.login_info
@@ -297,7 +292,7 @@ def set_seq_num(client_num):
 
 	try:
 		h = long(client_num)
-		seq_num = pow(h, secret_num) % MOD
+		seq_num = pow(h, secret_num) % LARGE_PRIME
 		return True
 	except ValueError:
 		print "Bad Sequence Number"
@@ -320,38 +315,30 @@ def ack(cmd, addr):
 	ret = False
 	c = cmd[1] 
 	if c == "PASS":
+		print "HERE"
+		if len(cmd) != 8:
+			return False
 		salt = get_salt(cmd[2])
 		if salt == None:
 			return False
-		ret = check_pass(cmd[3], cmd[4], salt, addr)
-		#check passwords
-	elif c == "ENCRYPT":
-		#Get the pubic key from the client
-		
-		#Check to see if a key was sent
-		if(cmd[2]):
-			if len(cmd) < 6:
-				return False
+		ret = login(cmd[3], cmd[4], salt, cmd[5], addr)
+		print "LOGGED IN"
+		if ret is False:
+			return False
 
-			chk = check_hash(user, cmd[3] ,cmd[4])
-			if chk == False:
-				return False
-
-			chk = set_seq_num(cmd[5])
-			if chk == False:
-				return False
-
-			cpub = cmd[2]
-			client_pub_text = cpub
-			client_pub = RSA.importKey(cpub)
-			client_pub = PKCS1_OAEP.new(client_pub)
-			user_logged_in = addr
-			ret = True
-
-		#No Public Key Sent
-		else:
-			send(s, "ERROR:NULLPUBKEY", addr)
-			ret = False
+		#set seq. num from the diffie numbers
+		chk = set_seq_num(cmd[6])
+		if chk == False:
+			return False
+		print "SEQ. NO'd"
+		#get client's public key information
+		cpub = cmd[7]
+		client_pub_text = cpub
+		client_pub = RSA.importKey(cpub)
+		client_pub = PKCS1_OAEP.new(client_pub)
+		print "PUBLIC KEYD"
+		user_logged_in = addr
+		ret = True
 	else:
 		send(s, "ERROR:ARGUMENT", addr)
 
@@ -479,7 +466,7 @@ while 1:
 
 	#Otherwise, data does not have to be encrypted (and shouldn't be)
 	else:
-		cmd = parse_message(msg)
+		cmd = messaging_util.parse_message(msg)
 		if cmd == None: #bad formatting, blocking
 			block_list.append(server)
 			continue
