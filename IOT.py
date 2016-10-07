@@ -17,8 +17,6 @@ MAX_CACHE = 10 					#Max entries in salt table
 PUB_KEY_FILE = "IOTrsa.pub"		#The file storing the public key of the IOT (4096 bits)
 PRIV_KEY_FILE = "IOTrsa"		#The file storing the private key of the IOT (Never send anywhere)
 REFRESH_TIMESTEP = 3600			#Amount of time it takes before block list is refreshed
-LARGE_PRIME = 105341			#large prime number used for diffy-hellmann key exchange
-RAND_LIMIT = 500000				#Largest allowed random number
 
 block_list = None
 table = None
@@ -186,18 +184,6 @@ Parses message in correct protocol - CMD:param1,param2,...,paramN
 '''
 
 '''
-Sets secret number for key exchange and returns what to send to client
-
-	@return public number to send to client for diffy-hellmann
-'''
-def get_diffie_nums():
-	global secret_num
-
-	secret_num = long(random.randint(0, RAND_LIMIT))
-	h = pow(3, secret_num) % LARGE_PRIME
-	return h
-
-'''
 Checks recieved password with pass from db by adding the cached salt and hashing again
 
 	@param username	given username
@@ -209,6 +195,7 @@ Checks recieved password with pass from db by adding the cached salt and hashing
 def login(username, password, salt, new_salt, addr):
 	global user_logged_in
 	global user
+	global secret_num
 
 	if check_password(username, password, salt) is False:
 		#user not found
@@ -222,7 +209,7 @@ def login(username, password, salt, new_salt, addr):
 	newhash = hash_password(new_salt)
 
 	#do diffie stuff
-	diffyH = str(get_diffie_nums())
+	secret_num, diffyH = messaging_util.get_diffie_nums()
 
 	send(sock, "ACK:ENCRYPT,"+ pubtext + "," + newhash + "," + diffyH, addr)
 	return True
@@ -281,25 +268,6 @@ def check_password(username, password, salt):
 	return pwd == password
 
 '''
-Sets seq. no. in accordance to diffy-hellmann
-
-	@param client_num		the client's public number
-	@return False if there was an error in setting up the seq. no
-			True if the seq. no. was set successfully
-'''
-def set_seq_num(client_num):
-	global seq_num
-
-	try:
-		h = long(client_num)
-		seq_num = pow(h, secret_num) % LARGE_PRIME
-		return True
-	except ValueError:
-		print "Bad Sequence Number"
-
-	return False
-
-'''
 Processes ACK according to protocol
 
 	@param cmd 		command we're dealing w/
@@ -311,32 +279,29 @@ def ack(cmd, addr):
 	global user_logged_in
 	global client_pub_text
 	global client_pub
+	global seq_num
 
 	ret = False
 	c = cmd[1] 
 	if c == "PASS":
-		print "HERE"
 		if len(cmd) != 8:
 			return False
 		salt = get_salt(cmd[2])
 		if salt == None:
 			return False
 		ret = login(cmd[3], cmd[4], salt, cmd[5], addr)
-		print "LOGGED IN"
 		if ret is False:
 			return False
 
 		#set seq. num from the diffie numbers
-		chk = set_seq_num(cmd[6])
-		if chk == False:
+		seq_num = messaging_util.set_seq_num(secret_num, cmd[6])
+		if seq_num is None:
 			return False
-		print "SEQ. NO'd"
 		#get client's public key information
 		cpub = cmd[7]
 		client_pub_text = cpub
 		client_pub = RSA.importKey(cpub)
 		client_pub = PKCS1_OAEP.new(client_pub)
-		print "PUBLIC KEYD"
 		user_logged_in = addr
 		ret = True
 	else:

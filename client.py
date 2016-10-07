@@ -59,8 +59,6 @@ class ConnectionHandler:
 PUB_KEY_FILE = "CLIENTrsa.pub"		#File that stores the client's public key
 PRIV_KEY_FILE = "CLIENTrsa"			#File used to store the client's private key
 REFRESH_TIMESTEP = 600				#Time
-LARGE_PRIME = 105341				#Large prime used for the modulo in the diffie helman seq. exchange 
-RAND_LIMIT = 500000					#Largest allowed random number
 
 block_list = None
 password = None
@@ -128,6 +126,7 @@ prompts for username, password, hashes password and forms the message
 def connect(msgnum, salt):
 	global password
 	global iot_salt
+	global secret_num
 
 	#prompt for username
 	username = raw_input("username : ")
@@ -140,7 +139,7 @@ def connect(msgnum, salt):
 	iot_salt = str(uuid.uuid4().hex)
 
 	#set up diffie hellman numbers
-	diffie_pub = get_diffie_nums()
+	secret_num, diffie_pub = messaging_util.get_diffie_nums()
 	#form message
 	return "ACK:PASS,"+msgnum+","+username+","+hashed+","+iot_salt+","+diffie_pub+","+clientPubText
 
@@ -154,38 +153,6 @@ def init_pub(pubKey):
 	global IOTpubtext
 
 	IOTpubtext = pubKey
-
-'''
-Helper method that creates the message used to tell the IOT the public
-key of this client.
-TODO: Document further
-
-	@return public key message to send to IOT
-'''
-'''def get_pub_msg():
-	salt = str(uuid.uuid4().hex)
-
-	msg = "ACK:ENCRYPT,"
-	msg += clientPubText+","
-	msg += hash_password(salt)+","
-	msg += salt+","
-
-
-	msg += get_diffie_nums()
-	return msg
-'''
-'''
-Sets secret number for key exchange and returns what to send to client
-
-	@return public number to send to client for diffy-hellmann
-'''
-def get_diffie_nums():
-	global secret_num
-
-	secret_num = long(random.randint(0,RAND_LIMIT))
-	raisedRand = long(pow(long(3),secret_num))
-	moddedRand = long(raisedRand % long(LARGE_PRIME))
-	return str(moddedRand)
 
 '''
 Method that initializes the public and private key's of the client as well 
@@ -326,23 +293,6 @@ def is_legit_server(pwd, salt):
 	#compare our hashed password w/ server's hashed password
 	return pwd == hashed
 
-'''
-sets the starting sequence number
-
-	@param numString		public number received by IOT
-'''
-def set_seq_num(num_string):
-	global seq_num
-
-	try:
-		recieved_long = long(num_string)
-		raised_long = pow(recieved_long,secret_num)
-		modded_long = raised_long % long(LARGE_PRIME)
-		seq_num = modded_long
-	except ValueError:
-		print "Erroneous sequence number sent"
-
-
 #create a UDP socket
 init()
 sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -425,8 +375,10 @@ while True:
 				#msg = get_pub_msg()
 
 				#generate the starting seq. no.
-				set_seq_num(cmd[4])
-
+				seq_num = messaging_util.set_seq_num(secret_num, cmd[4])
+				if seq_num is None:
+					print "This server is kinda sketchy - bad diffie number"
+					continue
 				#try to add the connection
 				new_conn = handler.add_conn(conn, IOTpubtext)
 				if new_conn == None:
